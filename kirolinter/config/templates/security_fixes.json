@@ -1,0 +1,26 @@
+{
+  "sql_injection_advanced": {
+    "fix_type": "REPLACE",
+    "confidence": 0.85,
+    "template": "Replace string formatting with parameterized query: cursor.execute(\"SELECT * FROM table WHERE column = ?\", (value,))",
+    "explanation": "Parameterized queries prevent SQL injection by separating SQL code from data values."
+  },
+  "hardcoded_jwt_secret": {
+    "fix_type": "REPLACE", 
+    "confidence": 0.9,
+    "template": "Replace hardcoded JWT secret with environment variable: jwt.encode(payload, os.environ.get('JWT_SECRET'), algorithm='HS256')",
+    "explanation": "JWT secrets should be stored securely in environment variables to prevent unauthorized token generation."
+  },
+  "hardcoded_database_url": {
+    "fix_type": "REPLACE",
+    "confidence": 0.85,
+    "template": "Replace hardcoded database URL with environment variable: os.environ.get('DATABASE_URL', 'sqlite:///default.db')",
+    "explanation": "Database connection strings often contain sensitive credentials and should be externalized."
+  },
+  "unsafe_pickle": {
+    "fix_type": "REPLACE",
+    "confidence": 0.9,
+    "template": "Replace pickle.loads() with json.loads() or implement custom serialization for untrusted data",
+    "explanation": "pickle.loads() can execute arbitrary code and should not be used with untrusted data."
+  }
+}

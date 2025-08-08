@@ -1,0 +1,6 @@
+rules:
+  unused_variable: true
+  dead_code: true
+  complex_function: true
+  sql_injection: true
+  hardcoded_secret: true

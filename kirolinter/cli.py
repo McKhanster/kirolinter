@@ -49,11 +49,12 @@ def cli(ctx):
 def analyze(target: str, format: str, output: Optional[str], config: Optional[str], 
            changed_only: bool, severity: Optional[str], exclude: tuple, verbose: bool):
     """
-    Analyze a Git repository or local codebase for code quality issues.
+    Analyze a Git repository, local codebase, or individual Python file for code quality issues.
     
     TARGET can be:
     - A Git repository URL (https://github.com/user/repo.git)
     - A local directory path (/path/to/project)
+    - A single Python file (path/to/file.py)
     - Current directory (.)
     """
     try:
@@ -189,14 +190,17 @@ def _validate_target(target: str) -> bool:
     if target.startswith(('http://', 'https://', 'git@')):
         return True
     
-    # Check if it's a valid local path
-    path = Path(target)
-    if path.exists() and path.is_dir():
-        return True
-    
     # Check if it's current directory
     if target == '.':
         return True
+    
+    # Check if it's a valid local path (directory or file)
+    path = Path(target)
+    if path.exists():
+        if path.is_dir():
+            return True
+        elif path.is_file() and path.suffix == '.py':
+            return True
     
     return False
 

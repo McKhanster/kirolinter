@@ -1,0 +1,26 @@
+{
+  "inefficient_string_concat": {
+    "fix_type": "REPLACE",
+    "confidence": 0.8,
+    "template": "Replace string concatenation in loop with: result = ''.join(items)",
+    "explanation": "String concatenation in loops creates many intermediate objects. Use join() for better performance."
+  },
+  "repeated_list_append": {
+    "fix_type": "REPLACE",
+    "confidence": 0.75,
+    "template": "Replace repeated append() calls with list comprehension: result = [process(item) for item in items]",
+    "explanation": "List comprehensions are generally faster than repeated append() calls."
+  },
+  "inefficient_dict_lookup": {
+    "fix_type": "REPLACE",
+    "confidence": 0.7,
+    "template": "Cache dictionary lookup: value = my_dict.get(key, default) instead of checking 'key in my_dict'",
+    "explanation": "Using dict.get() is more efficient than checking membership and then accessing the key."
+  },
+  "nested_loop_optimization": {
+    "fix_type": "REFACTOR",
+    "confidence": 0.6,
+    "template": "Consider using set intersection or dictionary lookup to optimize nested loops",
+    "explanation": "Nested loops with O(n²) complexity can often be optimized using data structures with better lookup performance."
+  }
+}

@@ -1,0 +1,30 @@
+enabled_rules:
+- unused_variable
+- unused_import
+- dead_code
+- complex_function
+- sql_injection
+- hardcoded_secret
+- unsafe_eval
+- unsafe_exec
+- inefficient_loop_concat
+- redundant_len_in_loop
+exclude_patterns:
+- __pycache__
+- .git
+- .venv
+- venv
+- env
+- .tox
+- build
+- dist
+- .pytest_cache
+- node_modules
+fallback_to_rules: true
+github_repo: ''
+github_token: ''
+max_complexity: 10
+max_line_length: 88
+min_severity: low
+openai_api_key: ''
+use_ai_suggestions: true

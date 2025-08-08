@@ -12,9 +12,11 @@ import subprocess
 import time
 
 from kirolinter.core.scanner import CodeScanner, ScanResult
+from kirolinter.core.suggester import SuggestionEngine
 from kirolinter.models.config import Config
 from kirolinter.utils.performance_tracker import PerformanceTracker
 from kirolinter.integrations.repository_handler import RepositoryHandler
+from kirolinter.reporting.json_reporter import JSONReporter
 
 
 @dataclass
@@ -47,6 +49,7 @@ class AnalysisEngine:
         self.config = config
         self.verbose = verbose
         self.scanner = CodeScanner(config.to_dict())
+        self.suggester = SuggestionEngine(config.to_dict())
         self.repo_handler = RepositoryHandler()
         self.performance_tracker = PerformanceTracker()
     
@@ -85,6 +88,7 @@ class AnalysisEngine:
             # Analyze files with progress tracking
             scan_results = []
             errors = []
+            all_issues = []
             
             for i, file_path in enumerate(python_files):
                 try:
@@ -93,6 +97,7 @@ class AnalysisEngine:
                     
                     result = self.process_file(file_path)
                     scan_results.append(result)
+                    all_issues.extend(result.issues)
                     
                     # Update progress
                     if progress_callback:
@@ -104,6 +109,19 @@ class AnalysisEngine:
                     errors.append(error_msg)
                     if self.verbose:
                         print(f"⚠️  {error_msg}")
+            
+            # Generate suggestions for all issues
+            if all_issues and self.verbose:
+                print("Generating suggestions...")
+            
+            suggestions = self.suggester.generate_suggestions(all_issues, analysis_path)
+            
+            # Add suggestions to scan results
+            for scan_result in scan_results:
+                for issue in scan_result.issues:
+                    if issue.id in suggestions:
+                        # Store suggestion in issue for later use
+                        issue.suggestion = suggestions[issue.id]
             
             # Calculate totals
             total_issues = sum(len(result.issues) for result in scan_results)
@@ -198,37 +216,52 @@ class AnalysisEngine:
                 raise RuntimeError(f"Failed to clone repository: {str(e)}")
         
         else:
-            # Local directory
+            # Local directory or file
             if target == '.':
                 target = os.getcwd()
             
             path = Path(target)
             if not path.exists():
                 raise ValueError(f"Path does not exist: {target}")
-            if not path.is_dir():
-                raise ValueError(f"Path is not a directory: {target}")
+            
+            # Handle both directories and individual Python files
+            if path.is_dir():
+                return str(path.resolve())
+            elif path.is_file() and path.suffix == '.py':
+                return str(path.resolve())
+            else:
+                raise ValueError(f"Target must be a directory or Python file: {target}")
             
             return str(path.resolve())
     
-    def _get_python_files(self, directory: str, changed_only: bool = False) -> List[Path]:
+    def _get_python_files(self, target_path: str, changed_only: bool = False) -> List[Path]:
         """
         Get list of Python files to analyze.
         
         Args:
-            directory: Directory to scan for Python files
+            target_path: Directory or file path to analyze
             changed_only: Only include files changed in the last commit
         
         Returns:
             List of Python file paths
         """
+        path = Path(target_path)
+        
+        # Handle individual file
+        if path.is_file() and path.suffix == '.py':
+            if not self._should_exclude_file(path):
+                return [path]
+            else:
+                return []
+        
+        # Handle directory
         if changed_only:
-            return self._get_changed_python_files(directory)
+            return self._get_changed_python_files(target_path)
         
         python_files = []
-        dir_path = Path(directory)
         
         # Recursively find Python files
-        for file_path in dir_path.rglob('*.py'):
+        for file_path in path.rglob('*.py'):
             # Skip files matching exclude patterns
             if self._should_exclude_file(file_path):
                 continue
@@ -291,33 +324,15 @@ class AnalysisEngine:
         return False
     
     def _generate_json_report(self, results: AnalysisResults) -> str:
-        """Generate JSON format report."""
-        import json
-        
-        report_data = {
-            'target': results.target,
-            'summary': {
-                'total_files': results.total_files,
-                'total_issues': results.total_issues,
-                'analysis_time': results.analysis_time,
-                'issues_by_severity': results.get_issues_by_severity()
-            },
-            'files': []
-        }
-        
-        for scan_result in results.scan_results:
-            file_data = {
-                'file_path': scan_result.file_path,
-                'issues': [issue.to_dict() for issue in scan_result.issues],
-                'metrics': scan_result.metrics,
-                'parse_errors': scan_result.parse_errors
-            }
-            report_data['files'].append(file_data)
-        
-        if results.errors:
-            report_data['errors'] = results.errors
-        
-        return json.dumps(report_data, indent=2)
+        """Generate JSON format report using JSONReporter."""
+        json_reporter = JSONReporter(include_diffs=True)
+        return json_reporter.generate_report(
+            target=results.target,
+            scan_results=results.scan_results,
+            total_files=results.total_files,
+            analysis_time=results.analysis_time,
+            errors=results.errors
+        )
     
     def _generate_summary_report(self, results: AnalysisResults) -> str:
         """Generate summary format report."""

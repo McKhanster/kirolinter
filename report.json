@@ -1,0 +1,24 @@
+📊 KiroLinter Analysis Summary
+Files analyzed: 16
+Issues found: 46
+
+🟠 HIGH SEVERITY (1):
+  /home/mcesel/Documents/proj/kirolinter/tests/test_scanner.py:163 - Potential hardcoded secret detected (regex fallback)
+
+🟡 MEDIUM SEVERITY (3):
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:102 - Function '_find_unused_variables' has high cyclomatic complexity (11)
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:158 - Function '_find_unused_imports' has high cyclomatic complexity (12)
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:325 - Function '_find_hardcoded_secrets' has high cyclomatic complexity (13)
+
+🟢 LOW SEVERITY (42):
+  /home/mcesel/Documents/proj/kirolinter/tests/test_scanner.py:6 - Unused import 'pytest'
+  /home/mcesel/Documents/proj/kirolinter/tests/test_scanner.py:5 - Unused import 'ast'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/cli.py:7 - Unused import 'os'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:20 - Unused variable 'parse_errors'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:163 - Unused variable 'imports'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:330 - Unused variable 'string_literals'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:8 - Unused import 'Optional'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/scanner.py:8 - Unused import 'Set'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/engine.py:25 - Unused variable 'total_files'
+  /home/mcesel/Documents/proj/kirolinter/kirolinter/core/engine.py:12 - Unused import 'time'
+  ... and 32 more

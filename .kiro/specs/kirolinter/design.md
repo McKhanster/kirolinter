@@ -266,30 +266,74 @@ Output: GitHub PR comments with suggestions
 
 ## Implementation Phases
 
-### Phase 1: Core Analysis Engine (MVP Focus)
+### Phase 1: Core Analysis Engine (MVP Focus) ✅ COMPLETED
 - Basic CLI interface with Click (defer web interface as stretch goal)
 - File system scanning and AST parsing
 - Simple rule-based issue detection
 - JSON report generation
 - Fallback rule-based suggestions if OpenAI API unavailable
 
-### Phase 2: AI Integration
+### Phase 2: AI Integration & Suggestions ✅ COMPLETED
 - OpenAI API integration for suggestions
-- Basic fix generation templates
+- Rule-based fix generation templates
 - Diff/patch creation functionality
+- Team style prioritization
 
-### Phase 3: GitHub Integration
+### Phase 3: CI/CD Integration (CURRENT)
+- GitHub Actions workflow for automated PR analysis
+- Automated code review comments using GitHub API
+- Integration with reviewdog for enhanced PR feedback
+- Workflow triggers on pull requests to main branch
+
+### Phase 4: GitHub Integration
 - GitHub API authentication
 - PR comment posting
 - Webhook handling for automation
 
-### Phase 4: Style Learning
+### Phase 5: Style Learning
 - Git history analysis
 - Team pattern extraction
 - Personalized suggestion ranking
 
-### Phase 5: Advanced Features
+### Phase 6: Advanced Features
 - CVE database integration
 - Performance optimization
 - Agent hooks implementation
 - Web interface (stretch goal)
+
+## CI/CD Integration Design
+
+### GitHub Actions Workflow
+
+The CI/CD pipeline automatically runs KiroLinter on pull requests to provide immediate feedback to developers.
+
+#### Workflow Triggers
+- Pull requests to `main` branch
+- Push events to pull request branches
+- Manual workflow dispatch for testing
+
+#### Workflow Steps
+1. **Checkout Code**: Get the PR branch and base branch
+2. **Setup Python**: Install Python 3.8+ and dependencies
+3. **Install KiroLinter**: Install the tool in the CI environment
+4. **Analyze Changed Files**: Run analysis only on files modified in the PR
+5. **Generate Report**: Create JSON report with suggestions and diffs
+6. **Post PR Comments**: Use GitHub API to comment on specific lines
+7. **Set Status Check**: Pass/fail based on critical issues found
+
+#### Integration Options
+
+**Option 1: Direct GitHub API Integration**
+- Use GitHub API to post review comments
+- Comment on specific lines where issues are found
+- Provide summary comment with overall analysis results
+
+**Option 2: Reviewdog Integration**
+- Use reviewdog for enhanced PR feedback
+- Better formatting and filtering of comments
+- Integration with existing review tools
+
+**Option 3: Hybrid Approach**
+- Use reviewdog for line comments
+- Use GitHub API for summary comments
+- Provide both detailed and overview feedback

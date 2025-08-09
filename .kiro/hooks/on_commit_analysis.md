@@ -101,26 +101,26 @@ You can customize the hook behavior by modifying the command:
 - `--output=analysis.json` - Save report to file
 - `--exclude="tests/*"` - Exclude test files from analysis
 
-## Testing with Flask Repository
+## Testing with KiroLinter Repository
 
-To test this hook with a sample Flask repository:
+To test this hook with the KiroLinter repository itself:
 
 ```bash
-# Clone Flask repository
-git clone https://github.com/pallets/flask.git
-cd flask
+# Clone KiroLinter repository
+git clone git@github.com:McKhanster/kirolinter.git
+cd kirolinter
 
 # Install KiroLinter in development mode
-pip install -e /path/to/kirolinter
+pip install -e .
 
 # Install the hook
-cp /path/to/kirolinter/.kiro/hooks/on_commit_analysis.md .git/hooks/post-commit
+cp .kiro/hooks/on_commit_analysis.md .git/hooks/post-commit
 chmod +x .git/hooks/post-commit
 
 # Make a test commit to a Python file
-echo "# Test variable for analysis" >> src/flask/app.py
-echo "unused_test_var = 'this will trigger unused variable detection'" >> src/flask/app.py
-git add src/flask/app.py
+echo "# Test variable for analysis" >> kirolinter/core/scanner.py
+echo "unused_test_var = 'this will trigger unused variable detection'" >> kirolinter/core/scanner.py
+git add kirolinter/core/scanner.py
 git commit -m "Test commit for KiroLinter hook"
 
 # The hook will automatically run and show analysis results
@@ -135,7 +135,7 @@ Files analyzed: 1
 Issues found: 1
 
 🟢 LOW SEVERITY (1):
-  src/flask/app.py:2847 - Unused variable 'unused_test_var'
+  kirolinter/core/scanner.py:567 - Unused variable 'unused_test_var'
 
 ⚠️  Issues found - review the analysis above
 ```
@@ -143,14 +143,14 @@ Issues found: 1
 ### Manual Testing Commands:
 
 ```bash
-# Test CLI directly on Flask repository
+# Test CLI directly on KiroLinter repository
 kirolinter analyze . --format=summary --severity=low
 
 # Test with changed files only
 kirolinter analyze --changed-only --format=json
 
 # Test with specific exclusions
-kirolinter analyze . --exclude="tests/*" --exclude="docs/*" --format=summary
+kirolinter analyze . --exclude="tests/*" --exclude="venv/*" --format=summary
 ```
 
 ## Troubleshooting

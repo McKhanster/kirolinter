@@ -1,0 +1,286 @@
+name: KiroLinter Code Review
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  kirolinter-analysis:
+    runs-on: ubuntu-latest
+    name: Automated Code Review
+    
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install reviewdog
+    
+    - name: Get changed Python files
+      id: changed-files
+      run: |
+        # Get list of changed Python files in this PR
+        git diff --name-only origin/${{ github.base_ref }}..HEAD | grep '\.py$' > changed_files.txt || true
+        if [ -s changed_files.txt ]; then
+          echo "changed_files=$(cat changed_files.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          echo "has_python_changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_python_changes=false" >> $GITHUB_OUTPUT
+        fi
+        echo "Changed Python files:"
+        cat changed_files.txt || echo "No Python files changed"
+    
+    - name: Run KiroLinter analysis
+      id: analysis
+      if: steps.changed-files.outputs.has_python_changes == 'true'
+      run: |
+        # Create analysis report
+        mkdir -p reports
+        
+        # Analyze changed files with JSON output
+        if [ -n "${{ steps.changed-files.outputs.changed_files }}" ]; then
+          echo "Analyzing files: ${{ steps.changed-files.outputs.changed_files }}"
+          
+          # Run analysis on each changed file
+          for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            if [ -f "$file" ]; then
+              echo "Analyzing $file..."
+              kirolinter analyze "$file" \
+                --format=json \
+                --severity=low \
+                --output="reports/$(basename $file .py)_report.json" || true
+            fi
+          done
+          
+          # Combine all reports into one
+          python -c "
+import json
+import glob
+import os
+
+combined_report = {
+    'kirolinter_version': '0.1.0',
+    'target': 'PR Analysis',
+    'summary': {'total_files_analyzed': 0, 'total_issues_found': 0, 'issues_by_severity': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}},
+    'files': []
+}
+
+for report_file in glob.glob('reports/*_report.json'):
+    try:
+        with open(report_file, 'r') as f:
+            report = json.load(f)
+            if 'files' in report:
+                combined_report['files'].extend(report['files'])
+                combined_report['summary']['total_files_analyzed'] += report['summary'].get('total_files_analyzed', 0)
+                combined_report['summary']['total_issues_found'] += report['summary'].get('total_issues_found', 0)
+                for severity in ['critical', 'high', 'medium', 'low']:
+                    combined_report['summary']['issues_by_severity'][severity] += report['summary'].get('issues_by_severity', {}).get(severity, 0)
+    except Exception as e:
+        print(f'Error processing {report_file}: {e}')
+
+with open('reports/combined_report.json', 'w') as f:
+    json.dump(combined_report, f, indent=2)
+
+print(f'Analysis complete. Found {combined_report[\"summary\"][\"total_issues_found\"]} issues in {combined_report[\"summary\"][\"total_files_analyzed\"]} files.')
+"
+          
+          # Set outputs for next steps
+          TOTAL_ISSUES=$(python -c "import json; report=json.load(open('reports/combined_report.json')); print(report['summary']['total_issues_found'])")
+          CRITICAL_ISSUES=$(python -c "import json; report=json.load(open('reports/combined_report.json')); print(report['summary']['issues_by_severity']['critical'])")
+          HIGH_ISSUES=$(python -c "import json; report=json.load(open('reports/combined_report.json')); print(report['summary']['issues_by_severity']['high'])")
+          
+          echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+          echo "critical_issues=$CRITICAL_ISSUES" >> $GITHUB_OUTPUT
+          echo "high_issues=$HIGH_ISSUES" >> $GITHUB_OUTPUT
+          
+          # Determine if we should fail the check
+          if [ "$CRITICAL_ISSUES" -gt 0 ]; then
+            echo "check_status=failure" >> $GITHUB_OUTPUT
+            echo "check_message=Found $CRITICAL_ISSUES critical security issues" >> $GITHUB_OUTPUT
+          elif [ "$HIGH_ISSUES" -gt 5 ]; then
+            echo "check_status=failure" >> $GITHUB_OUTPUT
+            echo "check_message=Found $HIGH_ISSUES high severity issues (limit: 5)" >> $GITHUB_OUTPUT
+          else
+            echo "check_status=success" >> $GITHUB_OUTPUT
+            echo "check_message=Code quality check passed" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "No Python files to analyze"
+          echo "total_issues=0" >> $GITHUB_OUTPUT
+          echo "check_status=success" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Setup reviewdog
+      if: steps.changed-files.outputs.has_python_changes == 'true' && steps.analysis.outputs.total_issues != '0'
+      run: |
+        # Convert JSON report to reviewdog format
+        python -c "
+import json
+import sys
+
+try:
+    with open('reports/combined_report.json', 'r') as f:
+        report = json.load(f)
+    
+    # Convert to reviewdog diagnostic format
+    for file_report in report.get('files', []):
+        file_path = file_report['file_path']
+        for issue in file_report.get('issues', []):
+            # Map severity to reviewdog level
+            level_map = {'critical': 'error', 'high': 'error', 'medium': 'warning', 'low': 'info'}
+            level = level_map.get(issue['severity'], 'info')
+            
+            # Create reviewdog diagnostic
+            diagnostic = {
+                'message': issue['message'],
+                'location': {
+                    'path': file_path,
+                    'range': {
+                        'start': {'line': issue['line_number'], 'column': issue.get('column', 1)}
+                    }
+                },
+                'severity': level.upper(),
+                'source': {
+                    'name': 'KiroLinter',
+                    'url': 'https://github.com/yourusername/kirolinter'
+                }
+            }
+            
+            # Add suggestion if available
+            if 'suggested_fix' in issue:
+                suggestion = issue['suggested_fix']
+                diagnostic['message'] += f\"\n\nSuggested fix ({suggestion['confidence']:.0%} confidence): {suggestion['explanation']}\"
+                if 'suggested_code' in suggestion and suggestion['suggested_code']:
+                    diagnostic['message'] += f\"\nSuggested code: {suggestion['suggested_code']}\"
+            
+            print(json.dumps(diagnostic))
+            
+except Exception as e:
+    print(f'Error converting report: {e}', file=sys.stderr)
+" > reviewdog_diagnostics.jsonl
+    
+    - name: Run reviewdog
+      if: steps.changed-files.outputs.has_python_changes == 'true' && steps.analysis.outputs.total_issues != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        cat reviewdog_diagnostics.jsonl | reviewdog -f=rdjsonl \
+          -name="KiroLinter" \
+          -reporter=github-pr-review \
+          -filter-mode=added \
+          -fail-on-error=false
+    
+    - name: Post PR summary comment
+      if: steps.changed-files.outputs.has_python_changes == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let reportContent = '';
+          let totalIssues = '${{ steps.analysis.outputs.total_issues }}';
+          
+          if (totalIssues === '0') {
+            reportContent = `## 🎉 KiroLinter Analysis - No Issues Found!
+            
+All changed Python files passed the code quality analysis.
+
+**Analysis Summary:**
+- Files analyzed: ${{ steps.changed-files.outputs.changed_files }}
+- Issues found: 0
+- Status: ✅ Passed`;
+          } else {
+            try {
+              const report = JSON.parse(fs.readFileSync('reports/combined_report.json', 'utf8'));
+              const summary = report.summary;
+              
+              reportContent = `## 📊 KiroLinter Analysis Results
+              
+**Summary:**
+- Files analyzed: ${summary.total_files_analyzed}
+- Total issues found: ${summary.total_issues_found}
+
+**Issues by Severity:**
+- 🔴 Critical: ${summary.issues_by_severity.critical}
+- 🟠 High: ${summary.issues_by_severity.high}  
+- 🟡 Medium: ${summary.issues_by_severity.medium}
+- 🟢 Low: ${summary.issues_by_severity.low}
+
+**Status:** ${{ steps.analysis.outputs.check_status === 'success' ? '✅ Passed' : '❌ Failed' }}
+
+${summary.issues_by_severity.critical > 0 ? '⚠️ **Critical security issues found!** Please address these before merging.' : ''}
+
+<details>
+<summary>View detailed analysis</summary>
+
+\`\`\`json
+${JSON.stringify(report, null, 2)}
+\`\`\`
+
+</details>
+
+---
+*Analysis powered by [KiroLinter](https://github.com/yourusername/kirolinter) 🔍*`;
+            } catch (error) {
+              reportContent = `## ❌ KiroLinter Analysis Error
+              
+There was an error processing the analysis results. Please check the workflow logs for details.
+
+Error: ${error.message}`;
+            }
+          }
+          
+          // Post comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: reportContent
+          });
+    
+    - name: Set status check
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const status = '${{ steps.analysis.outputs.check_status }}' || 'success';
+          const message = '${{ steps.analysis.outputs.check_message }}' || 'Analysis completed';
+          
+          github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: context.payload.pull_request.head.sha,
+            state: status,
+            target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            description: message,
+            context: 'KiroLinter/code-quality'
+          });
+    
+    - name: Upload analysis artifacts
+      if: always() && steps.changed-files.outputs.has_python_changes == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: kirolinter-analysis-results
+        path: |
+          reports/
+          reviewdog_diagnostics.jsonl
+        retention-days: 30

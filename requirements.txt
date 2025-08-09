@@ -1,3 +1,6 @@
 click
 pyyaml
 gitpython
+requests
+pytest
+openai

@@ -16,7 +16,10 @@ from kirolinter.core.suggester import SuggestionEngine
 from kirolinter.models.config import Config
 from kirolinter.utils.performance_tracker import PerformanceTracker
 from kirolinter.integrations.repository_handler import RepositoryHandler
+from kirolinter.integrations.github_client import GitHubClient
+from kirolinter.integrations.cve_database import CVEDatabase
 from kirolinter.reporting.json_reporter import JSONReporter
+from kirolinter.reporting.web_reporter import WebReporter
 
 
 @dataclass
@@ -52,6 +55,13 @@ class AnalysisEngine:
         self.suggester = SuggestionEngine(config.to_dict())
         self.repo_handler = RepositoryHandler()
         self.performance_tracker = PerformanceTracker()
+        
+        # Initialize CVE database if enabled
+        self.cve_database = None
+        if config.to_dict().get('enable_cve_integration', False):
+            self.cve_database = CVEDatabase(
+                api_key=config.to_dict().get('nvd_api_key', None)
+            )
     
     def analyze_codebase(self, target: str, changed_only: bool = False, 
                         progress_callback: Optional[Callable[[int], None]] = None) -> AnalysisResults:
@@ -109,6 +119,22 @@ class AnalysisEngine:
                     errors.append(error_msg)
                     if self.verbose:
                         print(f"⚠️  {error_msg}")
+            
+            # Enhance security issues with CVE database
+            if self.cve_database and all_issues:
+                if self.verbose:
+                    print("Enhancing security issues with CVE database...")
+                
+                enhanced_issues = self.cve_database.enhance_security_issues(all_issues)
+                
+                # Update scan results with enhanced issues
+                issue_map = {issue.id: issue for issue in enhanced_issues}
+                for scan_result in scan_results:
+                    for i, issue in enumerate(scan_result.issues):
+                        if issue.id in issue_map:
+                            scan_result.issues[i] = issue_map[issue.id]
+                
+                all_issues = enhanced_issues
             
             # Generate suggestions for all issues
             if all_issues and self.verbose:
@@ -179,6 +205,8 @@ class AnalysisEngine:
             return self._generate_summary_report(results)
         elif format == 'detailed':
             return self._generate_detailed_report(results)
+        elif format == 'html':
+            return self._generate_html_report(results)
         else:
             raise ValueError(f"Unsupported report format: {format}")
     
@@ -420,3 +448,55 @@ class AnalysisEngine:
                         lines.append(f"  ... and {sum(1 for sr in results.scan_results for i in sr.issues if i.severity.value == severity) - 10} more")
                         return
         lines.append("")
+    
+    def _generate_html_report(self, results: AnalysisResults) -> str:
+        """Generate HTML format report using WebReporter."""
+        web_reporter = WebReporter(include_source_code=True, theme='light')
+        return web_reporter.generate_report(
+            target=results.target,
+            scan_results=results.scan_results,
+            total_files=results.total_files,
+            analysis_time=results.analysis_time,
+            errors=results.errors
+        )
+    
+    def post_to_github_pr(self, pr_number: int, results: AnalysisResults,
+                         github_token: str, github_repo: str) -> bool:
+        """
+        Post analysis results to a GitHub pull request.
+        
+        Args:
+            pr_number: Pull request number
+            results: Analysis results to post
+            github_token: GitHub API token
+            github_repo: Repository in format 'owner/repo'
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not github_token or not github_repo:
+            print("GitHub token and repository are required for PR integration")
+            return False
+        
+        try:
+            client = GitHubClient(github_token, github_repo)
+            
+            # Generate summary for PR
+            summary = {
+                'total_files_analyzed': results.total_files,
+                'total_issues_found': results.total_issues,
+                'analysis_time_seconds': results.analysis_time,
+                'issues_by_severity': results.get_issues_by_severity()
+            }
+            
+            # Post summary comment
+            summary_success = client.post_summary_comment(pr_number, summary)
+            
+            # Post line-specific comments
+            comments_success = client.post_line_comments(pr_number, results.scan_results)
+            
+            return summary_success and comments_success
+            
+        except Exception as e:
+            print(f"Error posting to GitHub PR: {e}")
+            return False

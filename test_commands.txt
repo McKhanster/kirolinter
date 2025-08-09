@@ -1,0 +1,45 @@
+
+
+
+
+# Create organized results directory
+mkdir -p kirolinter_test_results
+cd kirolinter_test_results
+
+# 1. Single file summary → test1_single_file_summary.txt
+kirolinter analyze ../src/flask/app.py --format=summary --output=test1_single_file_summary.txt
+
+# 2. Single file JSON → test2_single_file_json.json  
+kirolinter analyze ../src/flask/app.py --format=json --output=test2_single_file_json.json
+
+# 3. Full directory analysis → test3_full_directory.json
+kirolinter analyze ../src/flask --format=json --severity=medium --verbose --output=test3_full_directory.json
+
+# 4. With configuration → test4_with_config.json
+kirolinter analyze ../src/flask --format=json --config=/home/mcesel/Documents/proj/kirolinter/.kirolinter.yaml --verbose --output=test4_with_config.json
+
+# 5. Detailed analysis → test5_detailed_analysis.txt
+kirolinter analyze ../src/flask --format=detailed --severity=low --output=test5_detailed_analysis.txt
+
+# 6. Security focus → test6_security_focus.json
+kirolinter analyze ../src/flask --format=json --severity=high --exclude="tests/*" --output=test6_security_focus.json
+
+
+# Compare file sizes
+ls -la test*.txt test*.json
+
+# View summary
+cat test1_single_file_summary.txt
+
+# Check JSON structure
+python -m json.tool test2_single_file_json.json | head -20
+
+
+# Count issues across tests
+grep -o '"total_issues_found": [0-9]*' test*.json
+
+# Check analysis times
+grep -o '"analysis_time_seconds": [0-9.]*' test*.json
+
+# Verify suggestions included
+grep -c '"suggested_fix"' test*.json

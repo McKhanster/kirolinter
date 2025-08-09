@@ -1,30 +1,87 @@
+# KiroLinter Configuration File
+# This file configures analysis rules, severity levels, and integrations
+
+# Analysis Rules Configuration
 enabled_rules:
-- unused_variable
-- unused_import
-- dead_code
-- complex_function
-- sql_injection
-- hardcoded_secret
-- unsafe_eval
-- unsafe_exec
-- inefficient_loop_concat
-- redundant_len_in_loop
-exclude_patterns:
-- __pycache__
-- .git
-- .venv
-- venv
-- env
-- .tox
-- build
-- dist
-- .pytest_cache
-- node_modules
-fallback_to_rules: true
-github_repo: ''
-github_token: ''
+  - unused_variable
+  - unused_import
+  - dead_code
+  - complex_function
+  - hardcoded_secret
+  - hardcoded_password
+  - hardcoded_api_key
+  - sql_injection
+  - unsafe_eval
+  - unsafe_exec
+  - inefficient_loop_concat
+  - redundant_len_in_loop
+
+# Severity and Quality Settings
+min_severity: low
 max_complexity: 10
 max_line_length: 88
-min_severity: low
-openai_api_key: ''
-use_ai_suggestions: true
+
+# File and Directory Exclusions
+exclude_patterns:
+  - "tests/*"
+  - "test_*"
+  - "*_test.py"
+  - "venv/*"
+  - "env/*"
+  - ".venv/*"
+  - "__pycache__/*"
+  - ".git/*"
+  - ".tox/*"
+  - "build/*"
+  - "dist/*"
+  - ".pytest_cache/*"
+  - "node_modules/*"
+  - "*.pyc"
+  - ".DS_Store"
+
+# AI Integration Settings (Optional)
+# Uncomment and add your OpenAI API key to enable AI-powered suggestions
+# openai_api_key: "your-openai-api-key-here"
+use_ai_suggestions: false  # Set to true if you have an API key
+fallback_to_rules: true
+
+# GitHub Integration Settings (Optional)
+# Uncomment and add your GitHub token for PR integration
+# github_token: "your-github-token-here"
+# github_repo: "owner/repository-name"
+
+# Team Style Preferences
+team_style:
+  naming_conventions:
+    variables: "snake_case"
+    functions: "snake_case"
+    classes: "PascalCase"
+    constants: "UPPER_SNAKE_CASE"
+  
+  import_style:
+    prefer_absolute: true
+    group_imports: true
+    sort_imports: true
+    max_imports_per_line: 1
+  
+  code_structure:
+    max_line_length: 88
+    prefer_list_comprehensions: true
+    max_function_complexity: 10
+    prefer_early_returns: true
+  
+  security_preferences:
+    env_var_prefix: "APP_"
+    prefer_secrets_manager: false
+    require_type_hints: false
+
+# Priority Rules for Issue Types
+priority_rules:
+  security: 1.0      # Highest priority
+  performance: 0.8   # High priority
+  code_smell: 0.6    # Medium priority
+
+# Performance Settings
+analysis_timeout: 300  # 5 minutes maximum
+concurrent_files: 4    # Number of files to analyze concurrently
+cache_results: true    # Cache analysis results for faster re-runs

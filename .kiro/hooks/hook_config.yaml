@@ -1,0 +1,256 @@
+# Kiro Agent Hooks Configuration
+# This file defines the configuration for automated KiroLinter hooks
+
+hooks:
+  on_commit_analysis:
+    name: "On Commit Analysis"
+    description: "Automatically analyze changed files after each git commit"
+    enabled: true
+    trigger: "post-commit"
+    timeout: 60
+    command: "kirolinter analyze --changed-only --format=summary --severity=medium"
+    working_directory: "."
+    environment:
+      KIROLINTER_CONFIG: ".kirolinter.yaml"
+    conditions:
+      - has_python_files: true
+      - not_in_rebase: true
+    notifications:
+      on_success: false
+      on_failure: true
+      on_issues_found: true
+    
+  pr_review_automation:
+    name: "PR Review Automation"
+    description: "Automatically analyze pull requests and post review comments"
+    enabled: true
+    trigger: "pull_request"
+    timeout: 300
+    command: "kirolinter analyze --changed-only --format=json --github-pr={pr_number}"
+    working_directory: "."
+    environment:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      GITHUB_REPO: "${GITHUB_REPO}"
+      KIROLINTER_CONFIG: ".kirolinter.yaml"
+    conditions:
+      - pr_has_python_files: true
+      - not_draft_pr: true
+    github_integration:
+      post_summary_comment: true
+      post_line_comments: true
+      create_status_check: true
+      fail_on_critical: true
+      fail_on_high: false
+    notifications:
+      on_success: true
+      on_failure: true
+      on_issues_found: true
+    
+  readme_spell_check:
+    name: "README Spell Check"
+    description: "Review and fix grammar/spelling errors in README files"
+    enabled: true
+    trigger: "manual"
+    timeout: 30
+    command: "python .kiro/hooks/readme_spell_check.py"
+    working_directory: "."
+    button_text: "🔤 Check Spelling"
+    button_tooltip: "Review and fix spelling/grammar in README files"
+    conditions:
+      - has_readme_files: true
+    auto_fix:
+      enabled: true
+      create_backup: true
+      confirm_before_fix: true
+    notifications:
+      on_success: true
+      on_failure: true
+
+# Global hook settings
+global_settings:
+  # Default timeout for all hooks (in seconds)
+  default_timeout: 120
+  
+  # Maximum number of concurrent hooks
+  max_concurrent_hooks: 3
+  
+  # Hook execution environment
+  execution_environment:
+    shell: "/bin/bash"
+    python_executable: "python3"
+    node_executable: "node"
+  
+  # Logging configuration
+  logging:
+    level: "INFO"
+    file: ".kiro/logs/hooks.log"
+    max_size: "10MB"
+    backup_count: 5
+  
+  # Notification settings
+  notifications:
+    enabled: true
+    channels:
+      - type: "console"
+        enabled: true
+      - type: "file"
+        enabled: true
+        file: ".kiro/logs/hook_notifications.log"
+      - type: "webhook"
+        enabled: false
+        url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+  
+  # Security settings
+  security:
+    allow_shell_execution: true
+    allowed_commands:
+      - "kirolinter"
+      - "python"
+      - "python3"
+      - "git"
+      - "node"
+      - "npm"
+    restricted_paths:
+      - "/etc"
+      - "/usr/bin"
+      - "/usr/local/bin"
+    environment_whitelist:
+      - "GITHUB_TOKEN"
+      - "GITHUB_REPO"
+      - "KIROLINTER_CONFIG"
+      - "PATH"
+      - "HOME"
+      - "USER"
+
+# Hook templates for easy creation
+templates:
+  git_hook:
+    trigger: "git"
+    timeout: 60
+    working_directory: "."
+    environment:
+      KIROLINTER_CONFIG: ".kirolinter.yaml"
+    conditions:
+      - has_python_files: true
+    
+  github_webhook:
+    trigger: "webhook"
+    timeout: 300
+    working_directory: "."
+    environment:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      GITHUB_REPO: "${GITHUB_REPO}"
+    github_integration:
+      post_summary_comment: true
+      create_status_check: true
+    
+  manual_task:
+    trigger: "manual"
+    timeout: 30
+    working_directory: "."
+    button_text: "Run Task"
+    notifications:
+      on_success: true
+      on_failure: true
+
+# Condition definitions
+conditions:
+  has_python_files:
+    type: "file_pattern"
+    pattern: "**/*.py"
+    exclude_patterns:
+      - "**/test_*.py"
+      - "**/tests/**"
+      - "**/__pycache__/**"
+  
+  has_readme_files:
+    type: "file_exists"
+    files:
+      - "README.md"
+      - "README.rst"
+      - "README.txt"
+      - "readme.md"
+  
+  not_in_rebase:
+    type: "git_status"
+    condition: "not_rebasing"
+  
+  pr_has_python_files:
+    type: "pr_changed_files"
+    pattern: "**/*.py"
+  
+  not_draft_pr:
+    type: "pr_status"
+    condition: "not_draft"
+
+# Integration configurations
+integrations:
+  github:
+    api_url: "https://api.github.com"
+    timeout: 30
+    retry_attempts: 3
+    retry_delay: 5
+    rate_limit:
+      requests_per_hour: 5000
+      burst_limit: 100
+  
+  slack:
+    webhook_timeout: 10
+    retry_attempts: 2
+    message_format: "markdown"
+  
+  email:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    use_tls: true
+    timeout: 30
+
+# Performance settings
+performance:
+  # Cache hook results to avoid redundant execution
+  enable_caching: true
+  cache_duration: 300  # 5 minutes
+  
+  # Parallel execution settings
+  enable_parallel_execution: true
+  max_parallel_hooks: 2
+  
+  # Resource limits
+  memory_limit: "512MB"
+  cpu_limit: "50%"
+  
+  # File watching settings
+  file_watcher:
+    enabled: true
+    debounce_delay: 1000  # milliseconds
+    ignore_patterns:
+      - "**/.git/**"
+      - "**/node_modules/**"
+      - "**/__pycache__/**"
+      - "**/venv/**"
+
+# Development and testing settings
+development:
+  # Enable debug mode for detailed logging
+  debug_mode: false
+  
+  # Dry run mode - show what would be executed without running
+  dry_run: false
+  
+  # Test mode settings
+  test_mode:
+    enabled: false
+    mock_external_calls: true
+    use_test_data: true
+  
+  # Hook development helpers
+  reload_on_change: true
+  validate_config_on_start: true
+  
+  # Testing utilities
+  test_hooks:
+    - name: "test_commit_hook"
+      description: "Test commit hook with sample data"
+      command: "echo 'Testing commit hook'"
+      trigger: "manual"
+      button_text: "Test Commit Hook"

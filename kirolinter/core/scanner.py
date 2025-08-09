@@ -413,15 +413,34 @@ class SecurityScanner(BaseScanner):
 class PerformanceScanner(BaseScanner):
     """Scanner for detecting performance bottlenecks."""
     
-    def _analyze_ast(self, tree: ast.AST, file_path: str) -> List[Issue]:
-        """Analyze AST for performance issues."""
+    def _analyze_ast(self, tree: ast.AST, file_path: str, content: str, config: Dict[str, Any] = None) -> List[Issue]:
+        """Analyze AST for performance issues with graceful error handling."""
         issues = []
+        config = config or {}
         
-        # Find inefficient loops
-        issues.extend(self._find_inefficient_loops(tree, file_path))
-        
-        # Find redundant operations
-        issues.extend(self._find_redundant_operations(tree, file_path))
+        try:
+            # Find inefficient loops
+            issues.extend(self._find_inefficient_loops(tree, file_path))
+            
+            # Find redundant operations
+            issues.extend(self._find_redundant_operations(tree, file_path))
+            
+        except Exception as e:
+            # Graceful fallback for intentional parse errors or analysis issues
+            if config.get('verbose', False):
+                print(f"Warning: Performance analysis encountered an issue in {file_path}: {e}")
+            
+            # Create a fallback issue to indicate analysis limitation
+            issues.append(Issue(
+                id=f"analysis_limitation_{hash(file_path)}",
+                type=IssueType.CODE_SMELL,
+                severity=Severity.LOW,
+                file_path=file_path,
+                line_number=1,
+                column=0,
+                message="Performance analysis encountered limitations - manual review recommended",
+                rule_id="analysis_fallback"
+            ))
         
         return issues
     

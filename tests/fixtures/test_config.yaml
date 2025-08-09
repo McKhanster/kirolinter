@@ -1,0 +1,186 @@
+# Test configuration for KiroLinter
+# This configuration enables all rules for comprehensive testing
+
+rules:
+  # Security rules
+  sql_injection:
+    enabled: true
+    severity: critical
+    description: "Detects potential SQL injection vulnerabilities"
+  
+  unsafe_eval:
+    enabled: true
+    severity: critical
+    description: "Detects unsafe use of eval() function"
+  
+  unsafe_exec:
+    enabled: true
+    severity: critical
+    description: "Detects unsafe use of exec() function"
+  
+  pickle_vulnerability:
+    enabled: true
+    severity: high
+    description: "Detects unsafe pickle deserialization"
+  
+  yaml_load_vulnerability:
+    enabled: true
+    severity: high
+    description: "Detects unsafe YAML loading"
+  
+  subprocess_shell_injection:
+    enabled: true
+    severity: high
+    description: "Detects shell injection in subprocess calls"
+  
+  hardcoded_secrets:
+    enabled: true
+    severity: medium
+    description: "Detects hardcoded secrets and credentials"
+  
+  xml_external_entity:
+    enabled: true
+    severity: high
+    description: "Detects XML External Entity vulnerabilities"
+  
+  # Code smell rules
+  unused_variable:
+    enabled: true
+    severity: low
+    description: "Detects unused variables"
+  
+  dead_code:
+    enabled: true
+    severity: medium
+    description: "Detects unreachable code"
+  
+  complex_function:
+    enabled: true
+    severity: medium
+    description: "Detects overly complex functions"
+  
+  duplicate_code:
+    enabled: true
+    severity: low
+    description: "Detects duplicate code blocks"
+  
+  too_many_parameters:
+    enabled: true
+    severity: low
+    description: "Detects functions with too many parameters"
+  
+  multiple_returns:
+    enabled: true
+    severity: low
+    description: "Detects functions with multiple return statements"
+  
+  # Performance rules
+  inefficient_loop:
+    enabled: true
+    severity: medium
+    description: "Detects inefficient loop patterns"
+  
+  inefficient_string_concat:
+    enabled: true
+    severity: medium
+    description: "Detects inefficient string concatenation"
+  
+  inefficient_list_concat:
+    enabled: true
+    severity: medium
+    description: "Detects inefficient list concatenation"
+  
+  redundant_len_calls:
+    enabled: true
+    severity: low
+    description: "Detects redundant len() calls"
+  
+  memory_inefficient:
+    enabled: true
+    severity: medium
+    description: "Detects memory-inefficient operations"
+
+# Analysis settings
+max_complexity: 10
+max_parameters: 8
+max_returns: 3
+
+# File exclusion patterns
+exclude_patterns:
+  - "*/test_*"
+  - "*/tests/*"
+  - "*/__pycache__/*"
+  - "*/venv/*"
+  - "*/env/*"
+  - "*/.git/*"
+  - "*/build/*"
+  - "*/dist/*"
+
+# CVE database settings
+enable_cve_integration: true
+nvd_api_key: null  # Set to your NVD API key for enhanced rate limits
+
+# GitHub integration settings
+github_token: null  # Set for GitHub integration
+github_repo: null   # Format: "owner/repo"
+
+# Suggestion engine settings
+enable_ai_suggestions: true
+openai_api_key: null  # Set for AI-powered suggestions
+suggestion_confidence_threshold: 0.7
+
+# Performance settings
+max_analysis_time: 300  # 5 minutes in seconds
+enable_parallel_processing: true
+max_worker_threads: 4
+
+# Output settings
+default_output_format: "json"
+include_suggestions: true
+include_diffs: true
+include_source_context: true
+
+# Team style analysis settings
+enable_style_learning: true
+commit_history_depth: 100
+style_confidence_threshold: 0.6
+
+# Severity level mappings
+severity_levels:
+  critical: 4
+  high: 3
+  medium: 2
+  low: 1
+
+# Rule categories
+rule_categories:
+  security:
+    - sql_injection
+    - unsafe_eval
+    - unsafe_exec
+    - pickle_vulnerability
+    - yaml_load_vulnerability
+    - subprocess_shell_injection
+    - hardcoded_secrets
+    - xml_external_entity
+  
+  code_smell:
+    - unused_variable
+    - dead_code
+    - complex_function
+    - duplicate_code
+    - too_many_parameters
+    - multiple_returns
+  
+  performance:
+    - inefficient_loop
+    - inefficient_string_concat
+    - inefficient_list_concat
+    - redundant_len_calls
+    - memory_inefficient
+
+# Testing-specific settings
+test_mode: true
+verbose_output: false
+fail_on_critical: true
+fail_on_high: false

@@ -25,7 +25,7 @@ def cli(ctx):
 @cli.command()
 @click.argument('target', type=str)
 @click.option('--format', '-f', 
-              type=click.Choice(['json', 'summary', 'detailed']), 
+              type=click.Choice(['json', 'summary', 'detailed', 'html']), 
               default='json',
               help='Output format for the analysis report')
 @click.option('--output', '-o', 
@@ -46,8 +46,16 @@ def cli(ctx):
 @click.option('--verbose', '-v', 
               is_flag=True, 
               help='Enable verbose output')
+@click.option('--github-pr', 
+              type=int, 
+              help='Post results as comments on GitHub PR number')
+@click.option('--github-token', 
+              help='GitHub token for API access (overrides config)')
+@click.option('--github-repo', 
+              help='GitHub repository in format owner/repo (overrides config)')
 def analyze(target: str, format: str, output: Optional[str], config: Optional[str], 
-           changed_only: bool, severity: Optional[str], exclude: tuple, verbose: bool):
+           changed_only: bool, severity: Optional[str], exclude: tuple, verbose: bool,
+           github_pr: Optional[int], github_token: Optional[str], github_repo: Optional[str]):
     """
     Analyze a Git repository, local codebase, or individual Python file for code quality issues.
     
@@ -98,6 +106,19 @@ def analyze(target: str, format: str, output: Optional[str], config: Optional[st
             click.echo(f"✅ Report saved to {output}")
         else:
             click.echo(report)
+        
+        # Post to GitHub PR if requested
+        if github_pr:
+            success = engine.post_to_github_pr(
+                pr_number=github_pr,
+                results=results,
+                github_token=github_token or config_obj.github_token,
+                github_repo=github_repo or config_obj.github_repo
+            )
+            if success:
+                click.echo(f"✅ Results posted to GitHub PR #{github_pr}")
+            else:
+                click.echo(f"❌ Failed to post to GitHub PR #{github_pr}", err=True)
         
         # Performance summary
         elapsed = tracker.stop()

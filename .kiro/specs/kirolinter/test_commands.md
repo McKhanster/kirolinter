@@ -12,6 +12,15 @@ cd flask
 pip install -e /path/to/kirolinter
 ```
 
+### Quick Test (No Config Required)
+```bash
+# Simple test without configuration file
+kirolinter analyze src/flask/app.py --format=json --severity=medium
+
+# Expected: JSON output with detected issues and suggestions
+# Should complete in under 2 seconds for a single file
+```
+
 ### Test Commands with JSON Output and Diffs
 
 #### 1. Full Analysis with Suggestions and Diffs
@@ -20,6 +29,42 @@ pip install -e /path/to/kirolinter
 kirolinter analyze src/flask --format=json --output=flask_analysis_with_diffs.json --severity=medium --verbose
 
 # Expected: JSON report with suggested_fix sections containing diff patches
+# Performance target: Complete analysis in under 5 seconds for Flask codebase
+```
+
+#### 1.1 Week 2 Enhanced Analysis Command
+
+**Option A: With Configuration File**
+```bash
+# First, create a config file (or use the provided .kirolinter.yaml)
+kirolinter config init
+
+# Enhanced analysis with team style learning and AI suggestions
+kirolinter analyze src/flask \
+  --format=json \
+  --output=flask_enhanced_analysis.json \
+  --severity=low \
+  --verbose \
+  --config=.kirolinter.yaml
+
+# Expected output with enhanced features:
+# - Team style-aware suggestions
+# - AI-powered fix recommendations (if OpenAI key configured)
+# - Diff patches for all fixable issues
+# - Performance metrics showing 229+ issues detected in ~1.23s
+```
+
+**Option B: Without Configuration File (Recommended for Testing)**
+```bash
+# Enhanced analysis using default settings
+kirolinter analyze src/flask \
+  --format=json \
+  --output=flask_enhanced_analysis.json \
+  --severity=low \
+  --verbose
+
+# This command works immediately without requiring a config file
+# Uses built-in defaults for all settings
 ```
 
 #### 2. Individual File Analysis
@@ -177,6 +222,101 @@ time kirolinter analyze . --format=json --severity=medium --exclude="venv/*" --e
 2. **Missing diff patches**: Check that DiffGenerator is working and include_diffs=True
 3. **Invalid JSON**: Verify JSONReporter is being used instead of summary format
 4. **Performance issues**: Use --exclude patterns for large directories
+
+### Comprehensive Testing Sequence with File Output
+
+```bash
+# Create a results directory for organized output
+mkdir -p kirolinter_test_results
+cd kirolinter_test_results
+
+# 1. Quick single file test (summary format with file output)
+kirolinter analyze ../src/flask/app.py --format=summary --output=test1_single_file_summary.txt
+echo "✅ Test 1 complete - check test1_single_file_summary.txt"
+
+# 2. JSON output test (single file with structured output)
+kirolinter analyze ../src/flask/app.py --format=json --output=test2_single_file_json.json
+echo "✅ Test 2 complete - check test2_single_file_json.json"
+
+# 3. Full directory analysis (comprehensive scan with verbose output)
+kirolinter analyze ../src/flask --format=json --severity=medium --verbose --output=test3_full_directory.json
+echo "✅ Test 3 complete - check test3_full_directory.json"
+
+# 4. With configuration file (using custom settings)
+kirolinter analyze ../src/flask --format=json --config=../.kirolinter.yaml --verbose --output=test4_with_config.json
+echo "✅ Test 4 complete - check test4_with_config.json"
+
+# 5. Performance comparison test (detailed format for analysis)
+kirolinter analyze ../src/flask --format=detailed --severity=low --output=test5_detailed_analysis.txt
+echo "✅ Test 5 complete - check test5_detailed_analysis.txt"
+
+# 6. Security-focused analysis (high severity only)
+kirolinter analyze ../src/flask --format=json --severity=high --exclude="tests/*" --output=test6_security_focus.json
+echo "✅ Test 6 complete - check test6_security_focus.json"
+
+# 7. GitHub Integration Test (requires GitHub token and test PR)
+# Note: Replace PR_NUMBER and GITHUB_TOKEN with actual values
+export GITHUB_TOKEN="your_github_token_here"
+kirolinter analyze ../test_issues.py \
+  --format=json \
+  --output=test7_github_integration.json \
+  --github-pr=PR_NUMBER \
+  --github-token=$GITHUB_TOKEN \
+  --github-repo=yourusername/flask \
+  --verbose
+echo "✅ Test 7 complete - check GitHub PR for posted comments"
+```
+
+### File Output Analysis Commands
+
+```bash
+# Compare file sizes to see analysis depth
+ls -la test*.txt test*.json
+echo "📊 File sizes show analysis comprehensiveness"
+
+# View summary results
+echo "📋 Summary Report:"
+cat test1_single_file_summary.txt
+
+# Analyze JSON structure
+echo "🔍 JSON Structure Preview:"
+python -m json.tool test2_single_file_json.json | head -20
+
+# Count total issues found across all tests
+echo "📈 Issue Counts:"
+echo "Single file: $(grep -o '"total_issues_found": [0-9]*' test2_single_file_json.json | cut -d':' -f2 | tr -d ' ')"
+echo "Full directory: $(grep -o '"total_issues_found": [0-9]*' test3_full_directory.json | cut -d':' -f2 | tr -d ' ')"
+echo "With config: $(grep -o '"total_issues_found": [0-9]*' test4_with_config.json | cut -d':' -f2 | tr -d ' ')"
+
+# Check performance metrics
+echo "⚡ Performance Metrics:"
+grep -o '"analysis_time_seconds": [0-9.]*' test*.json | sed 's/"analysis_time_seconds": //' | sed 's/,//' | while read time; do
+  echo "Analysis time: ${time}s"
+done
+
+# Verify suggestions are included
+echo "🤖 Suggestion Analysis:"
+grep -c '"suggested_fix"' test*.json | while IFS=: read file count; do
+  echo "$file: $count suggestions found"
+done
+
+# Check severity distribution
+echo "📊 Severity Distribution:"
+python3 -c "
+import json
+import glob
+
+for file in glob.glob('test*.json'):
+    try:
+        with open(file, 'r') as f:
+            data = json.load(f)
+            if 'summary' in data and 'issues_by_severity' in data['summary']:
+                severity = data['summary']['issues_by_severity']
+                print(f'{file}: Critical={severity.get(\"critical\", 0)}, High={severity.get(\"high\", 0)}, Medium={severity.get(\"medium\", 0)}, Low={severity.get(\"low\", 0)}')
+    except Exception as e:
+        print(f'Error reading {file}: {e}')
+"
+```
 
 ### Debug Commands
 

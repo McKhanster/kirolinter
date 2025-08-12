@@ -36,6 +36,13 @@ KiroLinter is an intelligent code analysis tool that combines AST-based static a
 - Concurrent file analysis
 - Smart caching and exclusion patterns
 
+### 🤖 **AI Agent System** *(New!)*
+- **Multi-Agent Architecture**: Coordinator, Reviewer, Fixer, Integrator, and Learner agents
+- **Autonomous Workflows**: Full code review, fix application, and GitHub integration
+- **Continuous Learning**: Adapts to team patterns and improves over time
+- **LangChain Integration**: Advanced AI capabilities with conversation memory
+- **Safe Automation**: Backup creation and safety checks for all operations
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -66,6 +73,11 @@ kirolinter analyze . --severity=high --format=detailed
 
 # Analyze only changed files (requires Git)
 kirolinter analyze . --changed-only --format=summary
+
+# AI Agent System Commands (requires: pip install langchain langchain-openai)
+kirolinter agent review --repo=https://github.com/pallets/flask
+kirolinter agent workflow --repo=./my-project --auto-apply --create-pr
+kirolinter agent fix --repo=./project --auto-apply
 ```
 
 ## 📊 Example Output

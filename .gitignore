@@ -3,3 +3,8 @@ venv/
 info.txt
 __pycache__/
 kirolinter.egg-info/
+.env
+
+# Logs directory
+logs/
+*.log

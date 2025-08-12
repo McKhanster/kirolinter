@@ -53,9 +53,16 @@ def cli(ctx):
               help='GitHub token for API access (overrides config)')
 @click.option('--github-repo', 
               help='GitHub repository in format owner/repo (overrides config)')
+@click.option('--interactive-fixes', 
+              is_flag=True, 
+              help='Enable interactive batch fixes with user authorization')
+@click.option('--dry-run', 
+              is_flag=True, 
+              help='Show what fixes would be applied without making changes')
 def analyze(target: str, format: str, output: Optional[str], config: Optional[str], 
            changed_only: bool, severity: Optional[str], exclude: tuple, verbose: bool,
-           github_pr: Optional[int], github_token: Optional[str], github_repo: Optional[str]):
+           github_pr: Optional[int], github_token: Optional[str], github_repo: Optional[str],
+           interactive_fixes: bool, dry_run: bool):
     """
     Analyze a Git repository, local codebase, or individual Python file for code quality issues.
     
@@ -119,6 +126,22 @@ def analyze(target: str, format: str, output: Optional[str], config: Optional[st
                 click.echo(f"✅ Results posted to GitHub PR #{github_pr}")
             else:
                 click.echo(f"❌ Failed to post to GitHub PR #{github_pr}", err=True)
+        
+        # Interactive fixes if requested
+        if interactive_fixes or dry_run:
+            from kirolinter.core.interactive_fixer import InteractiveFixer
+            fixer = InteractiveFixer(verbose=verbose)
+            
+            if dry_run:
+                click.echo("\n🔍 Dry run mode - showing potential fixes without applying:")
+                fixer.show_potential_fixes(results)
+            else:
+                click.echo("\n🔧 Interactive fixes mode:")
+                fixes_applied = fixer.apply_interactive_fixes(results)
+                if fixes_applied > 0:
+                    click.echo(f"✅ Applied {fixes_applied} fixes successfully")
+                else:
+                    click.echo("ℹ️  No fixes were applied")
         
         # Performance summary
         elapsed = tracker.stop()

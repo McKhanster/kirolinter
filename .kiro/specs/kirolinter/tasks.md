@@ -11,6 +11,7 @@
   - Implement main analyze command with path/URL input handling
   - Add configuration management commands
   - Implement progress display and user interaction
+  - Add --interactive-fixes and --dry-run flags for batch code improvements
   - _Requirements: 1.1, 1.2, 1.7_
 
 - [x] 3. Create repository handler for Git and local file operations
@@ -58,6 +59,13 @@
   - Create output formatting utilities for different report types
   - _Requirements: 2.1, 2.2, 2.4, 2.6_
 
+- [x] 6.1 Implement interactive fixes functionality
+  - Create InteractiveFixer class for batch code fixes with user authorization
+  - Implement fix methods for unused imports, unused variables, and inefficient patterns
+  - Add backup file creation for safety and rollback capability
+  - Create comprehensive test suite for interactive fixes on real repositories (Flask)
+  - _Requirements: 2.3, 2.4_
+
 - [x] 7. Add configuration system with rule customization
   - Implement YAML-based configuration loading
   - Create rule enabling/disabling functionality
@@ -91,6 +99,7 @@
   - Implement integration tests for GitHub and CVE database
   - Add end-to-end testing with sample repositories (Flask/Django)
   - Create performance tests for large repository constraint
+  - Add interactive fixes testing with verification and demo scripts
   - _Requirements: 1.6_
 
 - [x] 12. Create Kiro agent hooks for automation

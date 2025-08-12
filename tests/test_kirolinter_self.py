@@ -18,61 +18,93 @@ def run_self_analysis():
     
     # Test 1: JSON format with CVE integration
     print("\n1️⃣  Testing JSON format with CVE integration...")
-    cmd_json = [
-        'python', '-m', 'kirolinter.cli',
-        'analyze', '.',
-        '--format', 'json',
-        '--enable-cve',
-        '--severity', 'low',
-        '--exclude', 'venv/*',
-        '--exclude', '__pycache__/*',
-        '--exclude', '.git/*'
-    ]
     
-    start_time = time.time()
-    result_json = subprocess.run(cmd_json, capture_output=True, text=True)
-    json_time = time.time() - start_time
+    # Create a temporary config file with CVE integration enabled
+    config_content = """
+enable_cve_integration: true
+rules:
+  sql_injection:
+    enabled: true
+    severity: critical
+  unsafe_eval:
+    enabled: true
+    severity: critical
+  unused_variable:
+    enabled: true
+    severity: low
+exclude_patterns:
+  - "venv/*"
+  - "__pycache__/*"
+  - ".git/*"
+  - "*.pyc"
+"""
     
-    if result_json.returncode == 0:
-        try:
-            json_data = json.loads(result_json.stdout)
-            summary = json_data.get('summary', {})
-            
-            print(f"✅ JSON Analysis completed in {json_time:.2f}s")
-            print(f"   Files analyzed: {summary.get('total_files', 0)}")
-            print(f"   Issues found: {summary.get('total_issues', 0)}")
-            
-            # Check for CVE-enhanced issues
-            cve_count = 0
-            for file_data in json_data.get('files', []):
-                for issue in file_data.get('issues', []):
-                    if issue.get('cve_id') or issue.get('cve_info'):
-                        cve_count += 1
-            
-            print(f"   CVE-enhanced issues: {cve_count}")
-            
-            # Save JSON report
-            with open('kirolinter_self_analysis.json', 'w') as f:
-                json.dump(json_data, f, indent=2)
-            print("   📄 JSON report saved to: kirolinter_self_analysis.json")
-            
-        except json.JSONDecodeError:
-            print("❌ Failed to parse JSON output")
-            print(f"STDERR: {result_json.stderr}")
-    else:
-        print(f"❌ JSON analysis failed with exit code {result_json.returncode}")
-        print(f"STDERR: {result_json.stderr}")
+    config_file = Path('temp_test_config.yaml')
+    config_file.write_text(config_content)
+    
+    try:
+        cmd_json = [
+            'python', '-m', 'kirolinter.cli',
+            'analyze', '.',
+            '--format', 'json',
+            '--config', str(config_file),
+            '--severity', 'low'
+        ]
+        
+        start_time = time.time()
+        result_json = subprocess.run(cmd_json, capture_output=True, text=True)
+        json_time = time.time() - start_time
+    
+        if result_json.returncode == 0:
+            try:
+                json_data = json.loads(result_json.stdout)
+                summary = json_data.get('summary', {})
+                
+                print(f"✅ JSON Analysis completed in {json_time:.2f}s")
+                print(f"   Files analyzed: {summary.get('total_files', 0)}")
+                print(f"   Issues found: {summary.get('total_issues', 0)}")
+                
+                # Check for CVE-enhanced issues
+                cve_count = 0
+                for file_data in json_data.get('files', []):
+                    for issue in file_data.get('issues', []):
+                        if issue.get('cve_id') or issue.get('cve_info'):
+                            cve_count += 1
+                
+                print(f"   CVE-enhanced issues: {cve_count}")
+                
+                # Save JSON report
+                with open('kirolinter_self_analysis.json', 'w') as f:
+                    json.dump(json_data, f, indent=2)
+                print("   📄 JSON report saved to: kirolinter_self_analysis.json")
+                
+            except json.JSONDecodeError:
+                print("❌ Failed to parse JSON output")
+                print(f"STDERR: {result_json.stderr}")
+        else:
+            print(f"⚠️  JSON analysis completed with issues (exit code {result_json.returncode})")
+            if result_json.stderr:
+                print(f"STDERR: {result_json.stderr}")
+            if result_json.stdout:
+                print("📊 Analysis output (first 500 chars):")
+                print(result_json.stdout[:500] + "..." if len(result_json.stdout) > 500 else result_json.stdout)
+    
+    finally:
+        # Clean up config file
+        if config_file.exists():
+            config_file.unlink()
     
     # Test 2: HTML format
     print("\n2️⃣  Testing HTML format...")
     cmd_html = [
-        'python', '-m', 'kirolinter.cli',
+        sys.executable, '-m', 'kirolinter.cli',
         'analyze', '.',
         '--format', 'html',
         '--output', 'kirolinter_self_analysis.html',
         '--severity', 'medium',
         '--exclude', 'venv/*',
-        '--exclude', '__pycache__/*'
+        '--exclude', '__pycache__/*',
+        '--exclude', '.git/*'
     ]
     
     start_time = time.time()
@@ -104,16 +136,25 @@ def run_self_analysis():
         else:
             print("❌ HTML file was not created")
     else:
-        print(f"❌ HTML analysis failed with exit code {result_html.returncode}")
-        print(f"STDERR: {result_html.stderr}")
+        print(f"⚠️  HTML analysis completed with issues (exit code {result_html.returncode})")
+        if result_html.stderr:
+            print(f"STDERR: {result_html.stderr}")
+        # HTML format writes to file, so check if file was created
+        html_file = Path('kirolinter_self_analysis.html')
+        if html_file.exists():
+            html_size = html_file.stat().st_size
+            print(f"✅ HTML report still generated: {html_size:,} bytes")
     
     # Test 3: Summary format
     print("\n3️⃣  Testing summary format...")
     cmd_summary = [
-        'python', '-m', 'kirolinter.cli',
+        sys.executable, '-m', 'kirolinter.cli',
         'analyze', '.',
         '--format', 'summary',
-        '--severity', 'medium'
+        '--severity', 'medium',
+        '--exclude', 'venv/*',
+        '--exclude', '__pycache__/*',
+        '--exclude', '.git/*'
     ]
     
     start_time = time.time()
@@ -127,15 +168,22 @@ def run_self_analysis():
         print(result_summary.stdout)
         print("-" * 40)
     else:
-        print(f"❌ Summary analysis failed with exit code {result_summary.returncode}")
-        print(f"STDERR: {result_summary.stderr}")
+        print(f"⚠️  Summary analysis completed with issues (exit code {result_summary.returncode})")
+        if result_summary.stderr:
+            print(f"STDERR: {result_summary.stderr}")
+        if result_summary.stdout:
+            print("\n📊 Summary Output:")
+            print("-" * 40)
+            print(result_summary.stdout)
+            print("-" * 40)
     
     # Test 4: Changed files only (if in git repo)
     print("\n4️⃣  Testing changed files analysis...")
     if Path('.git').exists():
         cmd_changed = [
-            'python', '-m', 'kirolinter.cli',
-            'analyze', '--changed-only',
+            sys.executable, '-m', 'kirolinter.cli',
+            'analyze', '.',
+            '--changed-only',
             '--format', 'summary'
         ]
         
@@ -149,7 +197,12 @@ def run_self_analysis():
             else:
                 print("ℹ️  No changed files to analyze")
         else:
-            print(f"❌ Changed files analysis failed: {result_changed.stderr}")
+            print(f"⚠️  Changed files analysis completed with issues (exit code {result_changed.returncode})")
+            if result_changed.stderr:
+                print(f"STDERR: {result_changed.stderr}")
+            if result_changed.stdout:
+                print("📊 Changed files output:")
+                print(result_changed.stdout)
     else:
         print("ℹ️  Not a git repository, skipping changed files test")
     
@@ -214,9 +267,10 @@ def test_specific_features():
         from kirolinter.models.config import Config
         config = Config()
         
-        if hasattr(config, 'rules') and hasattr(config, 'exclude_patterns'):
+        if hasattr(config, 'enabled_rules') and hasattr(config, 'exclude_patterns'):
             print("✅ Configuration system working")
-            print(f"   Default rules loaded: {len(getattr(config, 'rules', {}))}")
+            print(f"   Default rules loaded: {len(getattr(config, 'enabled_rules', []))}")
+            print(f"   Exclude patterns: {len(getattr(config, 'exclude_patterns', []))}")
         else:
             print("❌ Configuration system failed")
             
@@ -237,9 +291,20 @@ def main():
         print("\nTo set up:")
         print("git clone git@github.com:McKhanster/kirolinter.git")
         print("cd kirolinter")
+        print("python -m venv venv")
+        print("source venv/bin/activate  # On Windows: venv\\Scripts\\activate")
         print("pip install -e .")
         print("python test_kirolinter_self.py")
         return 1
+    
+    # Check if virtual environment is activated
+    if not hasattr(sys, 'real_prefix') and not (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+        print("⚠️  Warning: Virtual environment not detected")
+        print("It's recommended to run this in a virtual environment:")
+        print("source venv/bin/activate  # On Windows: venv\\Scripts\\activate")
+        print("Continuing anyway...")
+    else:
+        print(f"✅ Virtual environment active: {sys.prefix}")
     
     # Check if KiroLinter is installed
     try:

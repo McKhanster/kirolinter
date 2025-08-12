@@ -110,6 +110,10 @@ To test this hook with the KiroLinter repository itself:
 git clone git@github.com:McKhanster/kirolinter.git
 cd kirolinter
 
+# Set up virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install KiroLinter in development mode
 pip install -e .
 

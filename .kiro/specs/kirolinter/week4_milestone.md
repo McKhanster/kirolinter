@@ -87,6 +87,12 @@
 # Clone and set up KiroLinter repository
 git clone git@github.com:McKhanster/kirolinter.git
 cd kirolinter
+
+# Set up virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install KiroLinter in development mode
 pip install -e .
 
 # Run comprehensive self-analysis
@@ -106,8 +112,16 @@ python test_kirolinter_self.py
 git clone git@github.com:McKhanster/kirolinter.git
 cd kirolinter
 
+# Set up virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
+
+# Create config with CVE integration enabled
+echo "enable_cve_integration: true" > .kirolinter.yaml
+
 # Run analysis with CVE integration
-kirolinter analyze . --format=json --enable-cve --severity=medium
+kirolinter analyze . --format=json --config=.kirolinter.yaml --severity=medium
 
 # Expected output: Enhanced security issues with CVE references
 # Example: "SQL injection vulnerability (Related: CVE-2023-5678)"
@@ -302,6 +316,13 @@ Analysis time: 0.89s
 KiroLinter demonstrates its capabilities by analyzing its own codebase:
 
 ```bash
+# Set up environment
+git clone git@github.com:McKhanster/kirolinter.git
+cd kirolinter
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
+
 # Self-analysis command
 python test_kirolinter_self.py
 ```

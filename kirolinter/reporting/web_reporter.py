@@ -51,6 +51,7 @@ class WebReporter:
         html_header = self._generate_header(target, total_files, total_issues, analysis_time)
         html_summary = self._generate_summary_section(issues_by_severity, issues_by_type)
         html_filters = self._generate_filter_controls()
+        html_export = self._generate_export_controls()
         html_files = self._generate_files_section(scan_results)
         html_scripts = self._generate_javascript()
         
@@ -64,6 +65,7 @@ class WebReporter:
         {html_header}
         {html_summary}
         {html_filters}
+        {html_export}
         {html_files}
     </div>
     {html_scripts}
@@ -401,6 +403,72 @@ class WebReporter:
             background: #3d3d3d;
         }}
         
+        /* Export Controls */
+        .export-controls {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }}
+        
+        .export-group {{
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }}
+        
+        .export-group h3 {{
+            margin: 0;
+            margin-right: 20px;
+            color: #333;
+        }}
+        
+        .export-btn {{
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }}
+        
+        .export-btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }}
+        
+        .export-btn:active {{
+            transform: translateY(0);
+        }}
+        
+        /* Clickable Diffs */
+        .diff-clickable {{
+            cursor: pointer;
+            border: 1px dashed #ccc;
+            padding: 5px;
+            margin: 5px 0;
+            border-radius: 3px;
+            transition: background-color 0.2s ease;
+        }}
+        
+        .diff-clickable:hover {{
+            background-color: #f0f8ff;
+            border-color: #007acc;
+        }}
+        
+        .diff-expanded {{
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }}
+        
         /* Responsive Design */
         @media (max-width: 768px) {{
             .summary {{
@@ -414,6 +482,15 @@ class WebReporter:
             .filter-group {{
                 flex-direction: column;
                 align-items: stretch;
+            }}
+            
+            .export-group {{
+                flex-direction: column;
+                align-items: stretch;
+            }}
+            
+            .export-btn {{
+                margin-bottom: 10px;
             }}
         }}
         
@@ -526,6 +603,28 @@ class WebReporter:
         <input type="text" id="search-filter" class="search-box" placeholder="Search issues...">
         
         <button onclick="clearFilters()">Clear Filters</button>
+    </div>
+</div>
+"""
+    
+    def _generate_export_controls(self) -> str:
+        """Generate export controls."""
+        return """
+<div class="export-controls">
+    <div class="export-group">
+        <h3>📤 Export Options</h3>
+        <button onclick="exportToCSV()" class="export-btn">
+            📊 Export to CSV
+        </button>
+        <button onclick="exportToPDF()" class="export-btn">
+            📄 Export to PDF
+        </button>
+        <button onclick="exportToJSON()" class="export-btn">
+            📋 Export to JSON
+        </button>
+        <button onclick="copyToClipboard()" class="export-btn">
+            📋 Copy Summary
+        </button>
     </div>
 </div>
 """
@@ -668,7 +767,179 @@ class WebReporter:
         if (firstFile) {
             toggleFile(firstFile);
         }
+        
+        // Add click handlers for diffs
+        document.querySelectorAll('.diff-clickable').forEach(diff => {
+            diff.addEventListener('click', function() {
+                this.classList.toggle('diff-expanded');
+            });
+        });
     });
+    
+    // Export functionality
+    function exportToCSV() {
+        const issues = collectVisibleIssues();
+        const csvContent = generateCSV(issues);
+        downloadFile(csvContent, 'kirolinter-analysis.csv', 'text/csv');
+    }
+    
+    function exportToPDF() {
+        // Use browser's print functionality for PDF export
+        const printWindow = window.open('', '_blank');
+        const printContent = generatePrintableHTML();
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.print();
+    }
+    
+    function exportToJSON() {
+        const issues = collectVisibleIssues();
+        const jsonContent = JSON.stringify({
+            timestamp: new Date().toISOString(),
+            issues: issues
+        }, null, 2);
+        downloadFile(jsonContent, 'kirolinter-analysis.json', 'application/json');
+    }
+    
+    function copyToClipboard() {
+        const summary = generateSummaryText();
+        navigator.clipboard.writeText(summary).then(() => {
+            alert('Summary copied to clipboard!');
+        }).catch(() => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = summary;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('Summary copied to clipboard!');
+        });
+    }
+    
+    function collectVisibleIssues() {
+        const issues = [];
+        document.querySelectorAll('.issue-item').forEach(item => {
+            if (item.style.display !== 'none') {
+                const fileCard = item.closest('.file-card');
+                const filePath = fileCard.querySelector('.file-path').textContent;
+                const message = item.querySelector('.issue-message').textContent;
+                const location = item.querySelector('.issue-location').textContent;
+                const severity = item.dataset.severity;
+                const type = item.dataset.type;
+                
+                issues.push({
+                    file: filePath,
+                    location: location,
+                    severity: severity,
+                    type: type,
+                    message: message
+                });
+            }
+        });
+        return issues;
+    }
+    
+    function generateCSV(issues) {
+        const headers = ['File', 'Location', 'Severity', 'Type', 'Message'];
+        const csvRows = [headers.join(',')];
+        
+        issues.forEach(issue => {
+            const row = [
+                `"${issue.file}"`,
+                `"${issue.location}"`,
+                `"${issue.severity}"`,
+                `"${issue.type}"`,
+                `"${issue.message.replace(/"/g, '""')}"`
+            ];
+            csvRows.push(row.join(','));
+        });
+        
+        return csvRows.join('\\n');
+    }
+    
+    function generateSummaryText() {
+        const issues = collectVisibleIssues();
+        const severityCounts = {};
+        const typeCounts = {};
+        
+        issues.forEach(issue => {
+            severityCounts[issue.severity] = (severityCounts[issue.severity] || 0) + 1;
+            typeCounts[issue.type] = (typeCounts[issue.type] || 0) + 1;
+        });
+        
+        let summary = 'KiroLinter Analysis Summary\\n';
+        summary += '========================\\n\\n';
+        summary += `Total Issues: ${issues.length}\\n\\n`;
+        
+        summary += 'By Severity:\\n';
+        Object.entries(severityCounts).forEach(([severity, count]) => {
+            summary += `  ${severity}: ${count}\\n`;
+        });
+        
+        summary += '\\nBy Type:\\n';
+        Object.entries(typeCounts).forEach(([type, count]) => {
+            summary += `  ${type}: ${count}\\n`;
+        });
+        
+        return summary;
+    }
+    
+    function generatePrintableHTML() {
+        const issues = collectVisibleIssues();
+        let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>KiroLinter Analysis Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .issue { margin-bottom: 15px; padding: 10px; border-left: 4px solid #ccc; }
+                .critical { border-left-color: #dc3545; }
+                .high { border-left-color: #fd7e14; }
+                .medium { border-left-color: #ffc107; }
+                .low { border-left-color: #28a745; }
+                .file-header { font-weight: bold; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h1>KiroLinter Analysis Report</h1>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+            <p>Total Issues: ${issues.length}</p>
+        `;
+        
+        const byFile = {};
+        issues.forEach(issue => {
+            if (!byFile[issue.file]) byFile[issue.file] = [];
+            byFile[issue.file].push(issue);
+        });
+        
+        Object.entries(byFile).forEach(([file, fileIssues]) => {
+            html += `<div class="file-header">${file}</div>`;
+            fileIssues.forEach(issue => {
+                html += `
+                <div class="issue ${issue.severity}">
+                    <strong>${issue.location}</strong> - ${issue.severity.toUpperCase()}<br>
+                    ${issue.message}
+                </div>`;
+            });
+        });
+        
+        html += '</body></html>';
+        return html;
+    }
+    
+    function downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
 </script>
 """
     

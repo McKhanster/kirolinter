@@ -304,6 +304,11 @@ To test this hook with the KiroLinter repository itself:
 git clone git@github.com:YOUR_USERNAME/kirolinter.git
 cd kirolinter
 
+# Set up virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
+
 # Create a test branch
 git checkout -b test-kirolinter-hook
 

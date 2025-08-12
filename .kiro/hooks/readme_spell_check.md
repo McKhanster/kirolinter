@@ -422,6 +422,11 @@ To test this hook with the KiroLinter repository:
 git clone git@github.com:McKhanster/kirolinter.git
 cd kirolinter
 
+# Set up virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
+
 # Copy the spell check hook
 mkdir -p .kiro/hooks
 cp /path/to/kirolinter/.kiro/hooks/readme_spell_check.md .kiro/hooks/

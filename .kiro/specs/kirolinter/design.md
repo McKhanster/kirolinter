@@ -1203,4 +1203,182 @@ def validate_fix_safety(fix: Suggestion, context: Dict) -> SafetyScore:
 - **Graceful Degradation**: System falls back to standard mode if agents fail
 - **Error Recovery**: Automatic recovery from agent system failures
 - **Manual Mode**: Users can always switch to manual operation
-- **Hybrid Mode**: Combine manual and autonomous operations as needed
+- **Hybrid Mode**: Combine manual and autonomous operations as needed### Da
+ta Privacy and Security Enhancements
+
+#### Anonymization System
+
+**Purpose**: Ensure sensitive information is never stored in pattern memory while preserving learning effectiveness.
+
+**Anonymization Logic**:
+```python
+class DataAnonymizer:
+    """Comprehensive data anonymization for pattern storage."""
+    
+    SENSITIVE_PATTERNS = [
+        r'(?i)(password|passwd|pwd|secret|key|token|api_key)\s*[=:]\s*["\']?([^"\'\s]+)',
+        r'(?i)(bearer|basic)\s+([a-zA-Z0-9+/=]+)',
+        r'(?i)([a-f0-9]{32,})',  # Potential hashes/tokens
+        r'(?i)(sk-[a-zA-Z0-9]{48})',  # OpenAI API keys
+        r'(?i)(xai-[a-zA-Z0-9]{48})',  # xAI API keys
+        r'(?i)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',  # Email addresses
+        r'(?i)(https?://[^\s]+)',  # URLs (may contain sensitive info)
+    ]
+    
+    def anonymize_code_snippet(self, code: str) -> str:
+        """Anonymize sensitive data in code snippets."""
+        anonymized = code
+        for pattern in self.SENSITIVE_PATTERNS:
+            anonymized = re.sub(pattern, r'\1=<REDACTED>', anonymized)
+        return anonymized
+    
+    def anonymize_pattern_data(self, pattern_data: Dict) -> Dict:
+        """Anonymize pattern data before storage."""
+        if 'examples' in pattern_data:
+            pattern_data['examples'] = [
+                self.anonymize_code_snippet(example) 
+                for example in pattern_data['examples']
+            ]
+        
+        if 'code_samples' in pattern_data:
+            pattern_data['code_samples'] = {
+                key: self.anonymize_code_snippet(value)
+                for key, value in pattern_data['code_samples'].items()
+            }
+        
+        return pattern_data
+```
+
+**Security Measures**:
+- **Pre-storage Validation**: All data validated for sensitive content before storage
+- **Regex-based Detection**: Configurable patterns for different types of secrets
+- **Safe File Filtering**: Exclude sensitive files (.env, .secrets, etc.) from analysis
+- **Audit Logging**: Log all anonymization events for security monitoring
+- **Data Validation**: Verify anonymization effectiveness before pattern storage
+
+#### Performance Benchmarks
+
+**Memory System Performance Targets**:
+- **Pattern Storage**: <10ms for single pattern storage
+- **Pattern Retrieval**: <5ms for pattern queries with <100 patterns
+- **Bulk Operations**: <100ms for analyzing 50 commits
+- **Memory Usage**: <50MB for 1000 stored patterns
+- **Database Size**: <10MB for typical team repository (6 months of patterns)
+
+**Learning System Performance Targets**:
+- **Commit Analysis**: <2s for analyzing 100 commits
+- **Pattern Extraction**: <500ms for extracting patterns from 20 files
+- **Confidence Calculation**: <100ms for updating pattern confidence scores
+- **Team Style Adaptation**: <1s for updating config.py with new patterns
+
+**Scalability Metrics**:
+- **Concurrent Access**: Support 5+ simultaneous pattern operations
+- **Large Repositories**: Handle repositories with 10,000+ commits
+- **Long-term Storage**: Maintain performance with 6+ months of pattern data
+- **Cross-repository**: Support pattern learning across 10+ repositories
+
+#### Robustness Features
+
+**Error Handling and Recovery**:
+```python
+class RobustPatternMemory(PatternMemory):
+    """Enhanced PatternMemory with comprehensive error handling."""
+    
+    def store_pattern_safely(self, repo_path: str, pattern_type: str, 
+                           pattern_data: Dict, confidence: float) -> bool:
+        """Store pattern with comprehensive error handling and rollback."""
+        backup_data = None
+        try:
+            # Create backup of existing data
+            backup_data = self.get_pattern_backup(repo_path, pattern_type)
+            
+            # Validate and anonymize data
+            validated_data = self.validate_pattern_data(pattern_data)
+            anonymized_data = self.anonymizer.anonymize_pattern_data(validated_data)
+            
+            # Store with transaction safety
+            with self.get_transaction() as tx:
+                success = self.store_pattern(repo_path, pattern_type, anonymized_data, confidence)
+                if not success:
+                    tx.rollback()
+                    return False
+                
+                # Verify storage integrity
+                if not self.verify_pattern_integrity(repo_path, pattern_type):
+                    tx.rollback()
+                    return False
+                
+                tx.commit()
+                return True
+                
+        except Exception as e:
+            # Restore from backup if available
+            if backup_data:
+                self.restore_from_backup(repo_path, pattern_type, backup_data)
+            
+            self.log_error(f"Pattern storage failed: {e}")
+            return False
+```
+
+**Data Integrity Measures**:
+- **Transaction Safety**: All database operations wrapped in transactions
+- **Backup and Restore**: Automatic backup before pattern updates
+- **Integrity Verification**: Validate data consistency after operations
+- **Corruption Detection**: Regular database integrity checks
+- **Recovery Procedures**: Automatic recovery from common failure scenarios
+## Redi
+s Integration for Pattern Memory
+
+### Overview
+KiroLinter now uses Redis as the primary backend for pattern memory storage, providing significant improvements over the previous SQLite implementation.
+
+### Benefits of Redis Backend
+- **Zero Concurrency Issues**: Redis single-threaded architecture eliminates database locking
+- **High Performance**: Sub-millisecond operations for pattern storage and retrieval
+- **Automatic Cleanup**: TTL-based expiration removes need for manual cleanup routines
+- **Atomic Operations**: Pipeline support ensures data consistency
+- **Scalability**: Better performance under concurrent access patterns
+
+### Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Pattern Memory Layer                     │
+├─────────────────────────────────────────────────────────────┤
+│  Redis Backend (Primary)  │  SQLite Backend (Fallback)     │
+├─────────────────────────────────────────────────────────────┤
+│              Data Anonymization Layer                      │
+├─────────────────────────────────────────────────────────────┤
+│                   Agent Integration                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Structures
+- **Patterns**: Redis Hashes for structured pattern data
+- **Issues**: Redis Hashes with JSON serialization for issue tracking
+- **Fix Outcomes**: Redis Lists with automatic trimming
+- **Learning Sessions**: Redis Lists with TTL expiration
+- **Indexes**: Redis Sets for efficient pattern discovery
+
+### Fallback Strategy
+1. **Automatic Detection**: System detects Redis availability at startup
+2. **Graceful Fallback**: Falls back to SQLite if Redis unavailable
+3. **Transparent Operation**: Same API regardless of backend
+4. **Health Monitoring**: Built-in health checks for Redis connectivity
+
+### Configuration
+```python
+# Redis configuration (optional)
+REDIS_URL = "redis://localhost:6379"
+REDIS_TTL = 7776000  # 90 days default
+
+# Automatic backend selection
+pattern_memory = create_pattern_memory(
+    redis_url=REDIS_URL,
+    prefer_redis=True
+)
+```
+
+### Migration Path
+- **Backward Compatible**: Existing SQLite data continues to work
+- **Gradual Migration**: New data stored in Redis, old data in SQLite
+- **No Breaking Changes**: Same API for all agents and components

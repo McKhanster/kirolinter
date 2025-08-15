@@ -4,7 +4,7 @@ info.txt
 __pycache__/
 kirolinter.egg-info/
 .env
-
+.pytest_cache/
 # Logs directory
 logs/
 *.log

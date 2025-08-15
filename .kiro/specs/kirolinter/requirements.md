@@ -146,3 +146,31 @@ gentic System Enhancement Requirements
 5. WHEN patterns evolve THEN the system SHALL gradually adapt without losing valuable historical insights
 6. IF memory storage exceeds limits THEN the system SHALL intelligently summarize and compress older data
 7. WHEN switching between projects THEN the system SHALL maintain separate context and patterns for each repository
+
+### Requirement 11
+
+**User Story:** As a security-conscious development team, I want the AI agent system to protect sensitive information when learning from our codebase, so that secrets and private data are never stored or exposed in pattern memory.
+
+#### Acceptance Criteria
+
+1. WHEN storing patterns in memory THEN the system SHALL anonymize all sensitive information before persistence
+2. WHEN detecting secrets or API keys THEN the system SHALL mask them with 100% accuracy using configurable regex patterns
+3. WHEN analyzing commit history THEN the system SHALL exclude commits containing sensitive file changes (e.g., .env, secrets.yaml)
+4. WHEN sharing patterns across repositories THEN the system SHALL ensure no sensitive data leakage between projects
+5. WHEN exporting pattern data THEN the system SHALL validate that no secrets or PII are included in exports
+6. IF anonymization fails THEN the system SHALL reject the pattern storage and log the security event
+7. WHEN team members request pattern data THEN the system SHALL provide only anonymized, safe-to-share information
+
+### Requirement 12
+
+**User Story:** As a development team, I want the AI agent system to use high-performance, reliable data storage that eliminates concurrency issues, so that multiple agents can operate simultaneously without conflicts.
+
+#### Acceptance Criteria
+
+1. WHEN multiple agents access pattern memory simultaneously THEN the system SHALL handle all operations without locking or conflicts
+2. WHEN Redis is available THEN the system SHALL use Redis as the primary backend for optimal performance
+3. WHEN Redis is unavailable THEN the system SHALL automatically fall back to SQLite without service interruption
+4. WHEN storing patterns THEN the system SHALL use atomic operations to ensure data consistency
+5. WHEN cleaning up old data THEN the system SHALL use TTL-based expiration for automatic maintenance
+6. IF backend switching occurs THEN the system SHALL maintain the same API and functionality
+7. WHEN monitoring system health THEN the system SHALL provide status information for both Redis and SQLite backends

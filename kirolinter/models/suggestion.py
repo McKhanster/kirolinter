@@ -1,53 +1,117 @@
 """
-Data models for code fix suggestions.
+Suggestion model for KiroLinter AI Agent System.
+
+Represents fix suggestions with enhanced metadata for safety validation
+and outcome tracking.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Dict, Any, Optional
 
 
 class FixType(Enum):
-    """Types of fixes that can be suggested."""
+    """Fix type categories."""
     REPLACE = "replace"
-    INSERT = "insert"
     DELETE = "delete"
+    INSERT = "insert"
+    FORMAT = "format"
     REFACTOR = "refactor"
 
 
 @dataclass
 class Suggestion:
-    """Represents a suggested fix for a code issue."""
+    """
+    Represents a code fix suggestion with safety and tracking metadata.
     
+    Attributes:
+        issue_id: ID of the issue this suggestion fixes
+        file_path: Path to the file to be modified
+        line_number: Line number where fix should be applied
+        fix_type: Type of fix (replace, delete, insert, format)
+        suggested_code: The suggested code change
+        confidence: Confidence score (0.0-1.0)
+        diff_patch: Optional diff patch for the change
+        metadata: Additional metadata for the suggestion
+    """
     issue_id: str
-    fix_type: FixType
-    original_code: str
+    file_path: str
+    line_number: int
+    fix_type: str
     suggested_code: str
     confidence: float
-    explanation: str
     diff_patch: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def to_dict(self) -> dict:
-        """Convert suggestion to dictionary for JSON serialization."""
+    def __post_init__(self):
+        """Validate suggestion data after initialization."""
+        # Ensure confidence is in valid range
+        self.confidence = max(0.0, min(1.0, self.confidence))
+        
+        # Validate fix type
+        valid_fix_types = ['replace', 'delete', 'insert', 'format']
+        if self.fix_type not in valid_fix_types:
+            self.fix_type = 'replace'  # Default to replace
+    
+    @property
+    def issue(self):
+        """Alias for issue_id for backward compatibility."""
+        return self.issue_id
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert suggestion to dictionary representation."""
         return {
-            'issue_id': self.issue_id,
-            'fix_type': self.fix_type.value,
-            'original_code': self.original_code,
-            'suggested_code': self.suggested_code,
-            'confidence': self.confidence,
-            'explanation': self.explanation,
-            'diff_patch': self.diff_patch
+            "issue_id": self.issue_id,
+            "file_path": self.file_path,
+            "line_number": self.line_number,
+            "fix_type": self.fix_type,
+            "suggested_code": self.suggested_code,
+            "confidence": self.confidence,
+            "diff_patch": self.diff_patch,
+            "metadata": self.metadata
         }
     
     @classmethod
-    def from_dict(cls, data: dict) -> 'Suggestion':
-        """Create suggestion from dictionary."""
+    def from_dict(cls, data: Dict[str, Any]) -> 'Suggestion':
+        """Create Suggestion from dictionary representation."""
         return cls(
-            issue_id=data['issue_id'],
-            fix_type=FixType(data['fix_type']),
-            original_code=data['original_code'],
-            suggested_code=data['suggested_code'],
-            confidence=data['confidence'],
-            explanation=data['explanation'],
-            diff_patch=data.get('diff_patch')
+            issue_id=data["issue_id"],
+            file_path=data["file_path"],
+            line_number=data["line_number"],
+            fix_type=data["fix_type"],
+            suggested_code=data["suggested_code"],
+            confidence=data["confidence"],
+            diff_patch=data.get("diff_patch"),
+            metadata=data.get("metadata", {})
         )
+    
+    def is_safe_for_auto_apply(self) -> bool:
+        """
+        Check if suggestion is safe for automatic application.
+        
+        Returns:
+            True if suggestion meets safety criteria
+        """
+        # High confidence required
+        if self.confidence < 0.9:
+            return False
+        
+        # Safe fix types only
+        safe_types = ['replace', 'delete', 'format']
+        if self.fix_type not in safe_types:
+            return False
+        
+        # Reasonable code size
+        if len(self.suggested_code) > 500:
+            return False
+        
+        return True
+    
+    def __str__(self) -> str:
+        """String representation of the suggestion."""
+        return f"{self.fix_type} fix for {self.issue_id} at {self.file_path}:{self.line_number}"
+    
+    def __repr__(self) -> str:
+        """Detailed string representation."""
+        return (f"Suggestion(issue_id='{self.issue_id}', fix_type='{self.fix_type}', "
+                f"file='{self.file_path}:{self.line_number}', confidence={self.confidence:.2f})")

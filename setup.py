@@ -8,6 +8,12 @@ setup(
         "click>=8.1.3",
         "pyyaml>=6.0",
         "gitpython>=3.1.43",
+        "langchain>=0.1.0",
+        "apscheduler>=3.10.0",
+        "psutil>=5.9.0",
+        "redis>=4.5.0",
+        "scikit-learn>=1.3.0",
+        "numpy>=1.24.0",
     ],
     entry_points={
         "console_scripts": [

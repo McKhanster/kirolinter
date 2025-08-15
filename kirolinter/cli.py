@@ -7,6 +7,7 @@ import click
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -234,6 +235,13 @@ def github_review(pr_number: int, repo: str):
 @cli.group()
 def agent():
     """AI Agent System commands for autonomous code quality management."""
+    pass
+
+
+# Background Daemon Commands
+@cli.group()
+def daemon():
+    """Background daemon commands for continuous monitoring."""
     pass
 
 
@@ -467,6 +475,74 @@ def agent_test_model(model: str, verbose: bool):
         sys.exit(1)
 
 
+@agent.command('learn')
+@click.option('--repo', required=True, help='Repository path to learn from')
+@click.option('--interval', type=int, default=24, help='Periodic learning interval (hours)')
+@click.option('--show-anonymization', is_flag=True, help='Show anonymization process')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+def agent_learn(repo: str, interval: int, show_anonymization: bool, verbose: bool):
+    """Enable continuous learning with pattern extraction and team adaptation."""
+    try:
+        from kirolinter.agents.learner import LearnerAgent
+        from kirolinter.models.config import Config
+        
+        click.echo(f"🧠 Starting learning process for {repo}")
+        
+        # Initialize learner
+        learner = LearnerAgent(verbose=verbose)
+        config = Config()
+        
+        # Perform initial learning
+        click.echo("📚 Analyzing commit history...")
+        result = learner.learn_from_commits(repo, config)
+        
+        if result.get("success", True):
+            commits_analyzed = result.get("commits_analyzed", 0)
+            patterns_stored = result.get("patterns_stored", 0)
+            
+            click.echo(f"✅ Learning completed!")
+            click.echo(f"📊 Commits analyzed: {commits_analyzed}")
+            click.echo(f"🎯 Patterns stored: {patterns_stored}")
+            
+            # Show anonymization demo if requested
+            if show_anonymization:
+                click.echo("\n🔒 Anonymization Demo:")
+                click.echo("KiroLinter ensures security by anonymizing sensitive data before storing patterns.")
+                
+                # Example anonymization
+                from kirolinter.memory.pattern_memory import DataAnonymizer
+                anonymizer = DataAnonymizer()
+                
+                example_code = 'API_KEY = "sk-1234567890abcdef"'
+                anonymized = anonymizer.anonymize_code_snippet(example_code)
+                
+                click.echo(f"Before: {example_code}")
+                click.echo(f"After:  {anonymized}")
+                click.echo("See how API keys are redacted in the memory system!")
+            
+            # Start periodic learning if requested
+            if interval > 0:
+                click.echo(f"\n⏰ Starting periodic learning (every {interval} hours)...")
+                success = learner.start_periodic_learning(repo, interval)
+                
+                if success:
+                    click.echo("✅ Periodic learning started!")
+                    click.echo("   The system will continuously learn from your team's coding patterns")
+                else:
+                    click.echo("⚠️  Periodic learning not available (APScheduler required)")
+        else:
+            error = result.get("error", "Unknown error")
+            click.echo(f"❌ Learning failed: {error}")
+            sys.exit(1)
+            
+    except ImportError:
+        click.echo("❌ Learning system not available. Install with: pip install apscheduler gitpython", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Learning failed: {str(e)}", err=True)
+        sys.exit(1)
+
+
 @agent.command('status')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed status')
 def agent_status(verbose: bool):
@@ -591,3 +667,125 @@ def _save_report_to_file(result: dict, repo_path: str) -> Optional[str]:
     except Exception as e:
         click.echo(f"⚠️  Failed to save report: {str(e)}", err=True)
         return None
+
+
+@daemon.command('start')
+@click.option('--repo', required=True, help='Repository path to monitor')
+@click.option('--interval', type=int, default=24, help='Analysis interval in hours')
+@click.option('--max-cpu', type=float, default=50.0, help='Maximum CPU usage threshold (%)')
+@click.option('--max-memory', type=int, default=500, help='Maximum memory usage (MB)')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+def daemon_start(repo: str, interval: int, max_cpu: float, max_memory: int, verbose: bool):
+    """Start background daemon for continuous monitoring."""
+    try:
+        from kirolinter.automation.daemon import AnalysisDaemon
+        
+        click.echo(f"🚀 Starting KiroLinter daemon for {repo}")
+        click.echo(f"   Interval: {interval} hours")
+        click.echo(f"   Resource limits: {max_cpu}% CPU, {max_memory}MB memory")
+        
+        # Create and start daemon
+        daemon = AnalysisDaemon(
+            repo_path=repo,
+            interval_hours=interval,
+            max_cpu_percent=max_cpu,
+            max_memory_mb=max_memory,
+            verbose=verbose
+        )
+        
+        success = daemon.start()
+        
+        if success:
+            click.echo("✅ Daemon started successfully!")
+            click.echo("   Use 'kirolinter daemon status' to check status")
+            click.echo("   Use 'kirolinter daemon stop' to stop the daemon")
+            
+            # Keep the daemon running
+            try:
+                while daemon.is_running:
+                    time.sleep(60)  # Check every minute
+            except KeyboardInterrupt:
+                click.echo("\n🛑 Stopping daemon...")
+                daemon.stop()
+                click.echo("✅ Daemon stopped")
+        else:
+            click.echo("❌ Failed to start daemon")
+            sys.exit(1)
+            
+    except ImportError:
+        click.echo("❌ Daemon system not available. Install with: pip install apscheduler psutil", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Daemon start failed: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@daemon.command('status')
+@click.option('--repo', help='Repository path to check (optional)')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed status')
+def daemon_status(repo: Optional[str], verbose: bool):
+    """Show daemon status and statistics."""
+    try:
+        from kirolinter.automation.daemon import AnalysisDaemon
+        
+        if repo:
+            # Check specific repository daemon
+            daemon = AnalysisDaemon(repo_path=repo, verbose=False)
+            status = daemon.get_status()
+            
+            click.echo(f"📊 Daemon Status for {repo}")
+            click.echo("=" * 50)
+            
+            if status["is_running"]:
+                click.echo("✅ Status: Running")
+                click.echo(f"⏰ Interval: {status['current_interval_hours']} hours")
+                click.echo(f"📈 Analyses: {status['analysis_count']} completed")
+                
+                if status["last_analysis_time"]:
+                    click.echo(f"🕐 Last analysis: {status['last_analysis_time']}")
+                
+                if verbose:
+                    perf = status["performance_stats"]
+                    click.echo(f"📊 Success rate: {perf['successful_analyses']}/{perf['total_analyses']}")
+                    click.echo(f"⚡ Average duration: {perf['average_duration']:.2f}s")
+                    click.echo(f"🚫 Resource skips: {perf['resource_skips']}")
+            else:
+                click.echo("❌ Status: Not running")
+        else:
+            click.echo("📊 KiroLinter Daemon System Status")
+            click.echo("=" * 40)
+            click.echo("Use --repo to check specific repository daemon")
+            
+    except ImportError:
+        click.echo("❌ Daemon system not available. Install with: pip install apscheduler psutil", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Status check failed: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@daemon.command('trigger')
+@click.option('--repo', required=True, help='Repository path to analyze')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+def daemon_trigger(repo: str, verbose: bool):
+    """Manually trigger daemon analysis."""
+    try:
+        from kirolinter.automation.daemon import AnalysisDaemon
+        
+        click.echo(f"🔄 Triggering analysis for {repo}")
+        
+        daemon = AnalysisDaemon(repo_path=repo, verbose=verbose)
+        success = daemon.trigger_analysis()
+        
+        if success:
+            click.echo("✅ Analysis triggered successfully!")
+        else:
+            click.echo("❌ Failed to trigger analysis (daemon may not be running)")
+            sys.exit(1)
+            
+    except ImportError:
+        click.echo("❌ Daemon system not available. Install with: pip install apscheduler psutil", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Trigger failed: {str(e)}", err=True)
+        sys.exit(1)

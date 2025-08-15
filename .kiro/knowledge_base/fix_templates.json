@@ -1,0 +1,13 @@
+{
+  "template1": {
+    "id": "template1",
+    "issue_type": "issue1",
+    "success_rate": 0.0,
+    "usage_count": 0,
+    "created_at": "2025-08-13T13:28:52.231116",
+    "updated_at": "2025-08-13T13:28:52.231118",
+    "data": {
+      "data": "t1"
+    }
+  }
+}

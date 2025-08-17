@@ -236,6 +236,117 @@ class PatternMemory:
             self.logger.error(f"Failed to initialize database: {e}")
             # Create a fallback in-memory database for testing
             self.db_path = ":memory:"
+            # Re-try initialization with in-memory database
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS team_patterns (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        repo_path TEXT NOT NULL,
+                        pattern_type TEXT NOT NULL,
+                        pattern_name TEXT NOT NULL,
+                        pattern_data TEXT NOT NULL,
+                        confidence REAL DEFAULT 0.0,
+                        frequency INTEGER DEFAULT 1,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(repo_path, pattern_type, pattern_name)
+                    );
+                    
+                    CREATE TABLE IF NOT EXISTS issue_patterns (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        repo_path TEXT NOT NULL,
+                        issue_type TEXT NOT NULL,
+                        issue_rule TEXT NOT NULL,
+                        frequency INTEGER DEFAULT 1,
+                        severity TEXT NOT NULL,
+                        last_seen TEXT NOT NULL,
+                        trend_score REAL DEFAULT 0.0,
+                        confidence REAL DEFAULT 0.0,
+                        UNIQUE(repo_path, issue_type, issue_rule)
+                    );
+                    
+                    CREATE TABLE IF NOT EXISTS fix_outcomes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        repo_path TEXT NOT NULL,
+                        issue_type TEXT NOT NULL,
+                        fix_applied TEXT NOT NULL,
+                        outcome TEXT NOT NULL,
+                        timestamp TEXT NOT NULL,
+                        confidence REAL DEFAULT 0.0,
+                        fix_time_seconds REAL DEFAULT 0.0
+                    );
+                    
+                    CREATE TABLE IF NOT EXISTS learning_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        change_id TEXT NOT NULL,
+                        repo_path TEXT NOT NULL,
+                        before_data TEXT,
+                        after_data TEXT,
+                        reason TEXT NOT NULL,
+                        confidence_change REAL DEFAULT 0.0,
+                        created_at TEXT NOT NULL
+                    );
+                    """)
+            except Exception as e2:
+                self.logger.error(f"Failed to initialize fallback database: {e2}")
+    
+    def _ensure_tables_exist(self) -> None:
+        """Ensure all required tables exist, create them if missing."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.executescript("""
+                CREATE TABLE IF NOT EXISTS team_patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_path TEXT NOT NULL,
+                    pattern_type TEXT NOT NULL,
+                    pattern_name TEXT NOT NULL,
+                    pattern_data TEXT NOT NULL,
+                    confidence REAL DEFAULT 0.0,
+                    frequency INTEGER DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(repo_path, pattern_type, pattern_name)
+                );
+                
+                CREATE TABLE IF NOT EXISTS issue_patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_path TEXT NOT NULL,
+                    issue_type TEXT NOT NULL,
+                    issue_rule TEXT NOT NULL,
+                    frequency INTEGER DEFAULT 1,
+                    severity TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    trend_score REAL DEFAULT 0.0,
+                    confidence REAL DEFAULT 0.0,
+                    UNIQUE(repo_path, issue_type, issue_rule)
+                );
+                
+                CREATE TABLE IF NOT EXISTS fix_outcomes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_path TEXT NOT NULL,
+                    issue_type TEXT NOT NULL,
+                    fix_applied TEXT NOT NULL,
+                    outcome TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    confidence REAL DEFAULT 0.0,
+                    fix_time_seconds REAL DEFAULT 0.0
+                );
+                
+                CREATE TABLE IF NOT EXISTS learning_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    change_id TEXT NOT NULL,
+                    repo_path TEXT NOT NULL,
+                    before_data TEXT,
+                    after_data TEXT,
+                    reason TEXT NOT NULL,
+                    confidence_change REAL DEFAULT 0.0,
+                    created_at TEXT NOT NULL
+                );
+                """)
+                self.logger.info("Successfully ensured all database tables exist")
+        except Exception as e:
+            self.logger.error(f"Failed to ensure tables exist: {e}")
     
     @contextmanager
     def get_transaction(self, retries: int = 3):
@@ -337,8 +448,46 @@ class PatternMemory:
                 return True
                 
         except Exception as e:
-            self.logger.error(f"Failed to store pattern: {e}")
-            return False
+            error_msg = str(e)
+            if "no such table" in error_msg:
+                self.logger.warning(f"Database table missing, attempting to recreate: {e}")
+                # Try to recreate tables
+                self._ensure_tables_exist()
+                # Retry the operation once
+                try:
+                    with self.get_transaction() as conn:
+                        now = datetime.now().isoformat()
+                        pattern_json = json.dumps(anonymized_data)
+                        
+                        cursor = conn.execute("""
+                            SELECT id, pattern_data, confidence FROM team_patterns 
+                            WHERE repo_path = ? AND pattern_type = ?
+                        """, (repo_path, pattern_type))
+                        
+                        existing = cursor.fetchone()
+                        
+                        if existing:
+                            # Update existing pattern
+                            conn.execute("""
+                                UPDATE team_patterns 
+                                SET pattern_data = ?, confidence = ?, frequency = frequency + 1, updated_at = ?
+                                WHERE repo_path = ? AND pattern_type = ?
+                            """, (pattern_json, confidence, now, repo_path, pattern_type))
+                        else:
+                            # Insert new pattern
+                            conn.execute("""
+                                INSERT INTO team_patterns 
+                                (repo_path, pattern_type, pattern_name, pattern_data, confidence, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (repo_path, pattern_type, pattern_type, pattern_json, confidence, now, now))
+                        
+                        return True
+                except Exception as e2:
+                    self.logger.error(f"Failed to store pattern after table recreation: {e2}")
+                    return False
+            else:
+                self.logger.error(f"Failed to store pattern: {e}")
+                return False
     
     def store_team_pattern(self, repo_path: str, pattern_type: str, 
                           pattern_name: str, pattern_data: Dict[str, Any],

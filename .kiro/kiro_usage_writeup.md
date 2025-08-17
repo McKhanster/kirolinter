@@ -35,7 +35,7 @@ KiroLinter represents a successful case study in spec-driven development using K
 **Key Design Decisions**:
 - **Modular Scanner Architecture**: Separate scanners for security, performance, and code quality
 - **Plugin-Based Suggestions**: Rule-based templates with AI enhancement fallback
-- **Caching Strategy**: SQLite-based CVE database cache for performance
+- **Caching Strategy**: Redis-based pattern memory and CVE database cache for performance
 - **Reporting Pipeline**: Multiple output formats with interactive HTML reports
 
 **Research Integration**: Kiro encouraged research during design, leading to discoveries about:

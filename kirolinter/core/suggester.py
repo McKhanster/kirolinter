@@ -152,11 +152,12 @@ class RuleBasedSuggester:
         
         return Suggestion(
             issue_id=issue.id,
+            file_path=issue.file_path,
+            line_number=issue.line_number,
             fix_type=fix_type,
-            original_code=self._get_original_code(issue),
             suggested_code=suggested_code,
             confidence=confidence,
-            explanation=template["explanation"]
+            explanation=template.get("explanation", "Fix suggestion")
         )
     
     def _generate_env_var_name(self, issue: Issue) -> str:
@@ -273,7 +274,7 @@ class OpenAISuggester:
 Code Issue Analysis:
 - File: {issue.file_path}
 - Line: {issue.line_number}
-- Issue Type: {issue.type.value}
+- Issue Type: {issue.issue_type}
 - Rule: {issue.rule_id}
 - Message: {issue.message}
 
@@ -316,11 +317,12 @@ CONFIDENCE: [0.0-1.0]
         
         return Suggestion(
             issue_id=issue.id,
-            fix_type=FixType.REPLACE,  # Default to replace
-            original_code=self._get_original_code(issue),
+            file_path=issue.file_path,
+            line_number=issue.line_number,
+            fix_type="replace",  # Default to replace
             suggested_code=suggested_code,
             confidence=confidence,
-            explanation=explanation or "AI-generated suggestion"
+            explanation="AI-generated suggestion"
         )
     
     def _get_original_code(self, issue: Issue) -> str:

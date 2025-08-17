@@ -187,3 +187,61 @@ def mock_redis_unavailable():
         with patch('kirolinter.memory.redis_pattern_memory.redis.Redis.from_url') as mock_redis:
             mock_redis.side_effect = Exception("Redis connection failed")
             yield
+
+
+@pytest.fixture
+def temp_repo_dir():
+    """Create a temporary repository directory for testing."""
+    import tempfile
+    from pathlib import Path
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create some test Python files
+        test_file = Path(temp_dir) / "test.py"
+        test_file.write_text("""
+def unused_function():
+    pass
+
+def main():
+    x = 1  # unused variable
+    print("Hello World")
+""")
+        
+        # Create a simple git repo
+        import subprocess
+        try:
+            subprocess.run(['git', 'init'], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(['git', 'config', 'user.name', 'Test User'], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(['git', 'add', '.'], cwd=temp_dir, capture_output=True, check=True)
+            subprocess.run(['git', 'commit', '-m', 'Initial commit'], cwd=temp_dir, capture_output=True, check=True)
+        except:
+            pass  # Git operations are optional
+        
+        yield temp_dir
+
+
+@pytest.fixture(autouse=True)
+def mock_llm_dependencies():
+    """Mock LLM dependencies automatically for all tests."""
+    # Mock the LITELLM_AVAILABLE flag first
+    with patch('kirolinter.agents.llm_config.LITELLM_AVAILABLE', True), \
+         patch('kirolinter.agents.llm_provider.create_llm_provider') as mock_provider, \
+         patch('kirolinter.agents.llm_config.get_chat_model') as mock_chat_model, \
+         patch('kirolinter.agents.llm_config.LLMConfig.create_chat_model') as mock_create_model:
+        
+        # Create mock LLM objects
+        mock_llm = Mock()
+        mock_llm.invoke.return_value = Mock(content="Mock LLM response")
+        mock_llm.batch.return_value = [Mock(content="Mock batch response")]
+        
+        # Configure all mocks to return the same mock LLM
+        mock_provider.return_value = mock_llm
+        mock_chat_model.return_value = mock_llm
+        mock_create_model.return_value = mock_llm
+        
+        yield {
+            'provider': mock_provider,
+            'chat_model': mock_chat_model,
+            'llm': mock_llm
+        }

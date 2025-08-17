@@ -667,9 +667,9 @@ class WebReporter:
                     """
                 
                 issues_html += f"""
-                <div class="issue-item severity-{issue.severity.value} type-{issue.type.value}" 
-                     data-severity="{issue.severity.value}" 
-                     data-type="{issue.type.value}"
+                <div class="issue-item severity-{issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)} type-{issue.issue_type}" 
+                     data-severity="{issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)}" 
+                     data-type="{issue.issue_type}"
                      data-message="{issue.message.lower()}">
                     <div class="issue-header">
                         <div class="issue-message">{issue.message}</div>
@@ -677,7 +677,7 @@ class WebReporter:
                     </div>
                     <div class="issue-details">
                         <strong>Rule:</strong> {issue.rule_id} | 
-                        <strong>Type:</strong> {issue.type.value.replace('_', ' ').title()} | 
+                        <strong>Type:</strong> {issue.issue_type.replace('_', ' ').title()} | 
                         <strong>Severity:</strong> {issue.severity.value.upper()}
                     </div>
                     {cve_html}
@@ -962,12 +962,13 @@ class WebReporter:
         """Calculate count of issues by type."""
         type_counts = {
             "code_smell": 0,
+            "code_quality": 0,
             "security": 0,
             "performance": 0
         }
         
         for result in scan_results:
             for issue in result.issues:
-                type_counts[issue.type.value] += 1
+                type_counts[issue.issue_type] += 1
         
         return type_counts

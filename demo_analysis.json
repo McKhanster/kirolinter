@@ -1,0 +1,41 @@
+{
+  "kirolinter_version": "0.1.0",
+  "timestamp": "2025-08-16T19:37:12.112979Z",
+  "target": "test_demo.py",
+  "summary": {
+    "total_files_analyzed": 1,
+    "total_issues_found": 0,
+    "analysis_time_seconds": 0.0,
+    "issues_by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues_by_type": {
+      "code_smell": 0,
+      "security": 0,
+      "performance": 0
+    },
+    "has_critical_issues": false
+  },
+  "files": [
+    {
+      "file_path": "/home/mcesel/Documents/proj/kirolinter/test_demo.py",
+      "issues": [],
+      "metrics": {},
+      "parse_errors": [
+        "Analysis error: type object 'IssueType' has no attribute 'CODE_SMELL'",
+        "Analysis error: Issue.__init__() got an unexpected keyword argument 'id'",
+        "Analysis error: type object 'IssueType' has no attribute 'CODE_SMELL'"
+      ]
+    }
+  ],
+  "metadata": {
+    "rules_applied": [],
+    "file_extensions_analyzed": [
+      ".py"
+    ],
+    "excluded_patterns": []
+  }
+}

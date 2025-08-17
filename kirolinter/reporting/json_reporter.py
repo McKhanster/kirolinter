@@ -93,7 +93,7 @@ class JSONReporter:
             if hasattr(issue, 'suggestion') and issue.suggestion:
                 suggestion = issue.suggestion
                 issue_data["suggested_fix"] = {
-                    "fix_type": suggestion.fix_type.value,
+                    "fix_type": suggestion.fix_type,
                     "suggested_code": suggestion.suggested_code,
                     "confidence": suggestion.confidence,
                     "explanation": suggestion.explanation
@@ -145,13 +145,14 @@ class JSONReporter:
         """Calculate count of issues by type."""
         type_counts = {
             "code_smell": 0,
+            "code_quality": 0,
             "security": 0,
             "performance": 0
         }
         
         for result in scan_results:
             for issue in result.issues:
-                type_counts[issue.type.value] += 1
+                type_counts[issue.issue_type] += 1
         
         return type_counts
     

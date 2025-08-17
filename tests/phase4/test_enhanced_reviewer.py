@@ -63,7 +63,7 @@ class TestEnhancedReviewer:
         reviewer = ReviewerAgent(memory=mock_memory, verbose=True)
         
         # Mock scanner tool
-        with patch('kirolinter.agents.tools.scanner_tool.scan_repository') as mock_scan:
+        with patch('kirolinter.agents.reviewer.scan_repository') as mock_scan:
             mock_scan.invoke.return_value = {
                 "files": [
                     {

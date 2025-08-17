@@ -216,7 +216,7 @@ class GitHubClient:
         
         comment = f"{emoji} **{issue.severity.value.upper()}**: {issue.message}\n\n"
         comment += f"**Rule**: `{issue.rule_id}`\n"
-        comment += f"**Type**: {issue.type.value.replace('_', ' ').title()}\n"
+        comment += f"**Type**: {issue.issue_type.replace('_', ' ').title()}\n"
         
         # Add suggestion if available
         if hasattr(issue, 'suggestion') and issue.suggestion:

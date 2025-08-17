@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Set, Optional, Any
 from dataclasses import dataclass
 
-from kirolinter.models.issue import Issue, IssueType, Severity
+from kirolinter.models.issue import Issue, IssueType, IssueSeverity
 from kirolinter.utils.ast_helpers import ASTHelper
 
 
@@ -22,7 +22,7 @@ class ScanResult:
     
     def has_critical_issues(self) -> bool:
         """Check if any issue has critical severity."""
-        return any(issue.severity == Severity.CRITICAL for issue in self.issues)
+        return any(issue.severity == IssueSeverity.CRITICAL for issue in self.issues)
 
 
 class BaseScanner:
@@ -140,14 +140,12 @@ class CodeSmellScanner(BaseScanner):
         for var_name, (line_no, node) in assigned_vars.items():
             if var_name not in used_vars and not var_name.startswith('_'):
                 issues.append(Issue(
-                    id=f"unused_var_{var_name}_{line_no}",
-                    type=IssueType.CODE_SMELL,
-                    severity=Severity.LOW,
                     file_path=file_path,
                     line_number=line_no,
-                    column=node.col_offset,
+                    rule_id="unused_variable",
                     message=f"Unused variable '{var_name}'",
-                    rule_id="unused_variable"
+                    severity=IssueSeverity.LOW,
+                    issue_type="code_quality"
                 ))
         
         # Find unused imports
@@ -188,14 +186,12 @@ class CodeSmellScanner(BaseScanner):
             if import_name not in used_names and import_name != '*':
                 line_no, col_offset = import_nodes[import_name]
                 issues.append(Issue(
-                    id=f"unused_import_{import_name}_{line_no}",
-                    type=IssueType.CODE_SMELL,
-                    severity=Severity.LOW,
                     file_path=file_path,
                     line_number=line_no,
-                    column=col_offset,
+                    rule_id="unused_import",
                     message=f"Unused import '{import_name}'",
-                    rule_id="unused_import"
+                    severity=IssueSeverity.LOW,
+                    issue_type="code_quality"
                 ))
         
         return issues
@@ -213,14 +209,12 @@ class CodeSmellScanner(BaseScanner):
                         if i < len(node.body) - 1:
                             next_stmt = node.body[i + 1]
                             issues.append(Issue(
-                                id=f"dead_code_{next_stmt.lineno}",
-                                type=IssueType.CODE_SMELL,
-                                severity=Severity.MEDIUM,
                                 file_path=file_path,
                                 line_number=next_stmt.lineno,
-                                column=next_stmt.col_offset,
+                                rule_id="dead_code",
                                 message="Unreachable code after return statement",
-                                rule_id="dead_code"
+                                severity=IssueSeverity.MEDIUM,
+                                issue_type="code_quality"
                             ))
                             break
                 self.generic_visit(node)
@@ -240,14 +234,12 @@ class CodeSmellScanner(BaseScanner):
                 complexity = self._calculate_cyclomatic_complexity(node)
                 if complexity > max_complexity:
                     issues.append(Issue(
-                        id=f"complex_function_{node.name}_{node.lineno}",
-                        type=IssueType.CODE_SMELL,
-                        severity=Severity.MEDIUM if complexity <= 15 else Severity.HIGH,
                         file_path=file_path,
                         line_number=node.lineno,
-                        column=node.col_offset,
+                        rule_id="complex_function",
                         message=f"Function '{node.name}' has high cyclomatic complexity ({complexity})",
-                        rule_id="complex_function"
+                        severity=IssueSeverity.MEDIUM if complexity <= 15 else IssueSeverity.HIGH,
+                        issue_type="code_quality"
                     ))
                 self.generic_visit(node)
             
@@ -305,14 +297,12 @@ class SecurityScanner(BaseScanner):
                         if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Mod):
                             # String formatting with % operator
                             issues.append(Issue(
-                                id=f"sql_injection_{node.lineno}",
-                                type=IssueType.SECURITY,
-                                severity=Severity.HIGH,
                                 file_path=file_path,
                                 line_number=node.lineno,
-                                column=node.col_offset,
+                                rule_id="sql_injection",
                                 message="Potential SQL injection: use parameterized queries instead of string formatting",
-                                rule_id="sql_injection"
+                                severity=IssueSeverity.HIGH,
+                                issue_type="security"
                             ))
                 
                 self.generic_visit(node)
@@ -344,14 +334,12 @@ class SecurityScanner(BaseScanner):
                                 value = node.value.value
                                 if not any(placeholder in value.lower() for placeholder in ['placeholder', 'your_', 'example', 'test']):
                                     issues.append(Issue(
-                                        id=f"hardcoded_secret_{target.id}_{node.lineno}",
-                                        type=IssueType.SECURITY,
-                                        severity=Severity.HIGH,
                                         file_path=file_path,
                                         line_number=node.lineno,
-                                        column=node.col_offset,
+                                        rule_id="hardcoded_secret",
                                         message=f"Potential hardcoded secret in variable '{target.id}'",
-                                        rule_id="hardcoded_secret"
+                                        severity=IssueSeverity.HIGH,
+                                        issue_type="security"
                                     ))
         
         # Fallback: regex patterns for edge cases
@@ -367,18 +355,16 @@ class SecurityScanner(BaseScanner):
             for pattern, rule_id in secret_patterns:
                 if re.search(pattern, line, re.IGNORECASE):
                     # Avoid duplicates from AST detection
-                    existing_ids = {issue.id for issue in issues}
-                    new_id = f"{rule_id}_{line_no}"
-                    if new_id not in existing_ids:
+                    existing_issues = {(issue.rule_id, issue.line_number) for issue in issues}
+                    new_issue_key = (rule_id, line_no)
+                    if new_issue_key not in existing_issues:
                         issues.append(Issue(
-                            id=new_id,
-                            type=IssueType.SECURITY,
-                            severity=Severity.HIGH,
                             file_path=file_path,
                             line_number=line_no,
-                            column=0,
+                            rule_id=rule_id,
                             message=f"Potential hardcoded secret detected (regex fallback)",
-                            rule_id=rule_id
+                            severity=IssueSeverity.HIGH,
+                            issue_type="security"
                         ))
         
         return issues
@@ -392,14 +378,12 @@ class SecurityScanner(BaseScanner):
                 if isinstance(node.func, ast.Name):
                     if node.func.id in ['eval', 'exec']:
                         issues.append(Issue(
-                            id=f"unsafe_{node.func.id}_{node.lineno}",
-                            type=IssueType.SECURITY,
-                            severity=Severity.CRITICAL,
                             file_path=file_path,
                             line_number=node.lineno,
-                            column=node.col_offset,
+                            rule_id=f"unsafe_{node.func.id}",
                             message=f"Unsafe use of {node.func.id}() function",
-                            rule_id=f"unsafe_{node.func.id}"
+                            severity=IssueSeverity.CRITICAL,
+                            issue_type="security"
                         ))
                 
                 self.generic_visit(node)
@@ -432,14 +416,12 @@ class PerformanceScanner(BaseScanner):
             
             # Create a fallback issue to indicate analysis limitation
             issues.append(Issue(
-                id=f"analysis_limitation_{hash(file_path)}",
-                type=IssueType.CODE_SMELL,
-                severity=Severity.LOW,
                 file_path=file_path,
                 line_number=1,
-                column=0,
+                rule_id="analysis_fallback",
                 message="Performance analysis encountered limitations - manual review recommended",
-                rule_id="analysis_fallback"
+                severity=IssueSeverity.LOW,
+                issue_type="performance"
             ))
         
         return issues
@@ -457,14 +439,12 @@ class PerformanceScanner(BaseScanner):
                         isinstance(stmt.target, ast.Name)):
                         
                         issues.append(Issue(
-                            id=f"inefficient_loop_{node.lineno}",
-                            type=IssueType.PERFORMANCE,
-                            severity=Severity.MEDIUM,
                             file_path=file_path,
                             line_number=node.lineno,
-                            column=node.col_offset,
+                            rule_id="inefficient_loop_concat",
                             message="Inefficient list concatenation in loop - consider using list comprehension or join()",
-                            rule_id="inefficient_loop_concat"
+                            severity=IssueSeverity.MEDIUM,
+                            issue_type="performance"
                         ))
                 
                 self.generic_visit(node)
@@ -487,14 +467,12 @@ class PerformanceScanner(BaseScanner):
                     self._is_in_loop_condition(node)):
                     
                     issues.append(Issue(
-                        id=f"redundant_len_{node.lineno}",
-                        type=IssueType.PERFORMANCE,
-                        severity=Severity.LOW,
                         file_path=file_path,
                         line_number=node.lineno,
-                        column=node.col_offset,
+                        rule_id="redundant_len_in_loop",
                         message="Consider caching len() result outside loop",
-                        rule_id="redundant_len_in_loop"
+                        severity=IssueSeverity.LOW,
+                        issue_type="performance"
                     ))
                 
                 self.generic_visit(node)

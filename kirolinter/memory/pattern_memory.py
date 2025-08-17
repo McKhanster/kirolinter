@@ -904,11 +904,19 @@ class PatternMemory:
         try:
             insights = self.get_comprehensive_insights(repo_path)
             
+            # Add repo_path and metadata to the export
+            export_data = {
+                "repo_path": repo_path,
+                "export_timestamp": datetime.now().isoformat(),
+                "kirolinter_version": "1.0.0",  # Could be dynamic
+                **insights
+            }
+            
             if output_file is None:
                 output_file = f"kirolinter_patterns_{repo_path.replace('/', '_')}.json"
             
             # Ensure all data is anonymized before export
-            anonymized_insights = self.anonymizer.anonymize_pattern_data(insights)
+            anonymized_insights = self.anonymizer.anonymize_pattern_data(export_data)
             
             # Validate anonymization
             if not self.anonymizer.validate_anonymization(anonymized_insights):

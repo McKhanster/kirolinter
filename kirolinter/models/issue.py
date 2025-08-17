@@ -68,6 +68,11 @@ class Issue:
                 self.severity = IssueSeverity.LOW
     
     @property
+    def id(self) -> str:
+        """Generate unique identifier for the issue."""
+        return f"{self.rule_id}_{self.file_path}_{self.line_number}"
+    
+    @property
     def type(self) -> str:
         """Alias for issue_type for backward compatibility."""
         return self.issue_type
@@ -79,7 +84,7 @@ class Issue:
             "line_number": self.line_number,
             "rule_id": self.rule_id,
             "message": self.message,
-            "severity": self.severity.value,
+            "severity": self.severity.value if hasattr(self.severity, 'value') else str(self.severity),
             "issue_type": self.issue_type,
             "context": self.context,
             "priority_score": self.priority_score,
@@ -103,9 +108,9 @@ class Issue:
     
     def __str__(self) -> str:
         """String representation of the issue."""
-        return f"{self.rule_id} ({self.severity.value}) at {self.file_path}:{self.line_number}"
+        return f"{self.rule_id} ({self.severity.value if hasattr(self.severity, 'value') else str(self.severity)}) at {self.file_path}:{self.line_number}"
     
     def __repr__(self) -> str:
         """Detailed string representation."""
-        return (f"Issue(rule_id='{self.rule_id}', severity='{self.severity.value}', "
+        return (f"Issue(rule_id='{self.rule_id}', severity='{self.severity.value if hasattr(self.severity, 'value') else str(self.severity)}', "
                 f"file='{self.file_path}:{self.line_number}', priority={self.priority_score:.2f})")

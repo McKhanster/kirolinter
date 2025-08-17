@@ -334,6 +334,7 @@ from pathlib import Path
         """Test starting periodic learning."""
         # Mock scheduler
         mock_scheduler = MagicMock()
+        mock_scheduler.running = False  # Ensure start() will be called
         self.learner.scheduler = mock_scheduler
         
         success = self.learner.start_periodic_learning("/test/repo", 24)

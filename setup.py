@@ -14,6 +14,7 @@ setup(
         "redis>=4.5.0",
         "scikit-learn>=1.3.0",
         "numpy>=1.24.0",
+        "pytest>=7.0.0",
     ],
     entry_points={
         "console_scripts": [

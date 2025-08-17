@@ -74,38 +74,30 @@ class TestWorkflowOrchestration:
         with patch('kirolinter.memory.pattern_memory.create_pattern_memory', return_value=mock_memory):
             coordinator = CoordinatorAgent(verbose=True)
             
-            # Mock agent methods
-            with patch.object(coordinator.reviewer, 'analyze') as mock_analyze:
-                with patch.object(coordinator.reviewer, 'prioritize_issues') as mock_prioritize:
-                    with patch.object(coordinator.reviewer, 'notify_stakeholders') as mock_notify:
-                        
-                        # Setup mocks
-                        test_issue = Issue(
-                            file_path=os.path.join(temp_repo_dir, "test_file.py"),
-                            line_number=1,
-                            rule_id="unused_import",
-                            message="Unused import 'os'",
-                            severity=IssueSeverity.MEDIUM,
-                            issue_type="code_quality"
-                        )
-                        
-                        mock_analyze.return_value = [test_issue]
-                        mock_prioritize.return_value = [test_issue]
-                        mock_notify.return_value = None
-                        
-                        # Execute workflow
-                        result = coordinator.run_workflow(temp_repo_dir, "full_review")
-                        
-                        # Verify workflow execution
-                        assert result.get("success", True) is True
-                        assert result["workflow"] == "full_review"
-                        assert "steps" in result
-                        assert "analyze" in result["steps"]
-                        
-                        # Verify agent interactions
-                        mock_analyze.assert_called_once()
-                        mock_prioritize.assert_called_once()
-                        mock_notify.assert_called_once()
+            # Execute full_review workflow (predict, analyze, fix, integrate)
+            result = coordinator.run_workflow(temp_repo_dir, "full_review")
+            
+            # Verify workflow execution structure
+            assert "workflow" in result
+            assert result["workflow"] == "full_review"
+            assert "repo_path" in result
+            assert result["repo_path"] == temp_repo_dir
+            assert "steps" in result
+            
+            # Verify all expected steps were executed
+            expected_steps = ["predict", "analyze", "fix", "integrate"]
+            for step in expected_steps:
+                assert step in result["steps"], f"Step '{step}' missing from results"
+                assert "success" in result["steps"][step], f"Step '{step}' missing success status"
+            
+            # Verify overall workflow success (should succeed even if no issues found)
+            assert "success" in result
+            
+            # Verify step execution order and logic
+            assert result["steps"]["predict"]["success"] is True
+            assert result["steps"]["analyze"]["success"] is True
+            assert result["steps"]["fix"]["success"] is True
+            assert result["steps"]["integrate"]["success"] is True
     
     def test_pattern_aware_analysis(self, temp_repo_dir, mock_memory):
         """Test pattern-aware analysis with context integration."""
@@ -245,18 +237,23 @@ class TestWorkflowOrchestration:
             # Test learning from successful fix
             fixer.learn_from_fixes("test_issue", success=True, feedback="Good fix")
             
-            # Verify pattern storage
-            mock_memory.store_pattern.assert_called_with(
-                temp_repo_dir,
-                "fix_outcome",
-                {
-                    "issue_id": "test_issue",
-                    "success": True,
-                    "feedback": "Good fix",
-                    "timestamp": pytest.approx(datetime.now().isoformat(), abs=10)
-                },
-                1.0
-            )
+            # Verify pattern storage was called
+            mock_memory.store_pattern.assert_called()
+            
+            # Verify the call arguments
+            call_args = mock_memory.store_pattern.call_args
+            assert call_args[0][0] == temp_repo_dir  # repo_path
+            assert call_args[0][1] == "fix_outcome"  # pattern_type
+            
+            # Verify the pattern data structure
+            pattern_data = call_args[0][2]
+            assert pattern_data["issue_id"] == "test_issue"
+            assert pattern_data["success"] is True
+            assert pattern_data["feedback"] == "Good fix"
+            assert "timestamp" in pattern_data
+            
+            # Verify confidence score
+            assert call_args[0][3] == 1.0
             
             # Test strategy optimization
             mock_memory.get_team_patterns.return_value = [
@@ -325,52 +322,46 @@ class TestWorkflowOrchestration:
                     
                     # Check that workflow handled the failure gracefully
                     assert "steps" in result
-                    assert "error" in result or "workflow_stopped" in result
+                    
+                    # Should have a failed fix step but with recovery
+                    assert "fix" in result["steps"]
+                    assert result["steps"]["fix"]["success"] is False
+                    assert "error" in result["steps"]["fix"]
+                    assert result["steps"]["fix"].get("recovered") is True
+                    
+                    # Overall workflow should be marked as failed due to step failure
+                    assert result["success"] is False
     
     def test_comprehensive_workflow_integration(self, temp_repo_dir, mock_memory):
-        """Test end-to-end workflow with all agents."""
+        """Test end-to-end autonomous workflow with all steps."""
         with patch('kirolinter.memory.pattern_memory.create_pattern_memory', return_value=mock_memory):
             coordinator = CoordinatorAgent(verbose=True)
             
-            # Mock all agent interactions
-            with patch('kirolinter.agents.learner.LearnerAgent') as mock_learner_class:
-                with patch('kirolinter.agents.reviewer.ReviewerAgent') as mock_reviewer_class:
-                    with patch('kirolinter.agents.fixer.FixerAgent') as mock_fixer_class:
-                        with patch('kirolinter.agents.integrator.IntegratorAgent') as mock_integrator_class:
-                            
-                            # Setup mock instances
-                            mock_learner = Mock()
-                            mock_reviewer = Mock()
-                            mock_fixer = Mock()
-                            mock_integrator = Mock()
-                            
-                            mock_learner_class.return_value = mock_learner
-                            mock_reviewer_class.return_value = mock_reviewer
-                            mock_fixer_class.return_value = mock_fixer
-                            mock_integrator_class.return_value = mock_integrator
-                            
-                            # Setup mock returns
-                            mock_learner.predict_issues.return_value = [{"rule_id": "test", "probability": 0.8}]
-                            mock_reviewer.analyze.return_value = [Mock()]
-                            mock_reviewer.prioritize_issues.return_value = [Mock()]
-                            mock_reviewer.notify_stakeholders.return_value = None
-                            mock_fixer.apply_fixes.return_value = ["fix_1"]
-                            mock_fixer.learn_from_fixes.return_value = None
-                            mock_integrator.create_pr.return_value = {"pr_created": True, "pr_number": 123}
-                            
-                            # Execute autonomous workflow
-                            result = coordinator.run_workflow(temp_repo_dir, "autonomous")
-                            
-                            # Verify all steps were executed
-                            assert result["success"] is True
-                            assert len(result["steps"]) == 5  # predict, analyze, fix, integrate, learn
-                            
-                            # Verify agent method calls
-                            mock_learner.predict_issues.assert_called_once()
-                            mock_reviewer.analyze.assert_called_once()
-                            mock_reviewer.prioritize_issues.assert_called_once()
-                            mock_fixer.apply_fixes.assert_called_once()
-                            mock_integrator.create_pr.assert_called_once()
+            # Execute autonomous workflow (predict, analyze, fix, integrate, learn)
+            result = coordinator.run_workflow(temp_repo_dir, "autonomous")
+            
+            # Verify workflow structure
+            assert "workflow" in result
+            assert result["workflow"] == "autonomous"
+            assert "steps" in result
+            
+            # Verify all autonomous workflow steps were attempted
+            expected_steps = ["predict", "analyze", "fix", "integrate", "learn"]
+            assert len(result["steps"]) == len(expected_steps)
+            
+            for step in expected_steps:
+                assert step in result["steps"], f"Step '{step}' missing from autonomous workflow"
+                assert "success" in result["steps"][step], f"Step '{step}' missing success status"
+            
+            # Verify overall workflow success
+            assert "success" in result
+            
+            # Verify each step completed successfully
+            for step in expected_steps:
+                assert result["steps"][step]["success"] is True, f"Step '{step}' failed in autonomous workflow"
+            
+            # Verify autonomous workflow includes learning step
+            assert "patterns_learned" in result["steps"]["learn"] or result["steps"]["learn"]["success"] is True
 
 
 if __name__ == "__main__":

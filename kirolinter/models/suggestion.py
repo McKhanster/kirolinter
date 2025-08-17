@@ -41,6 +41,7 @@ class Suggestion:
     suggested_code: str
     confidence: float
     diff_patch: Optional[str] = None
+    explanation: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -68,6 +69,7 @@ class Suggestion:
             "suggested_code": self.suggested_code,
             "confidence": self.confidence,
             "diff_patch": self.diff_patch,
+            "explanation": self.explanation,
             "metadata": self.metadata
         }
     
@@ -82,6 +84,7 @@ class Suggestion:
             suggested_code=data["suggested_code"],
             confidence=data["confidence"],
             diff_patch=data.get("diff_patch"),
+            explanation=data.get("explanation", ""),
             metadata=data.get("metadata", {})
         )
     

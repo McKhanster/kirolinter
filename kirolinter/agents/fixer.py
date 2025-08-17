@@ -470,7 +470,7 @@ class FixerAgent:
             # Higher success rate -> lower threshold (more aggressive)
             # Lower success rate -> higher threshold (more conservative)
             base_threshold = 0.9
-            adjustment = (success_rate - 0.5) * 0.1  # ±0.05 max adjustment
+            adjustment = (0.5 - success_rate) * 0.1  # ±0.05 max adjustment (inverted for correct direction)
             self.confidence_threshold = max(0.8, min(0.95, base_threshold + adjustment))
             
             if self.verbose:

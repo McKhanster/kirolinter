@@ -1,0 +1,145 @@
+name: 'KiroLinter DevOps Quality Gates'
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      gate_type:
+        description: 'Quality gate type'
+        required: false
+        default: 'pre-merge'
+        type: choice
+        options:
+        - pre-commit
+        - pre-merge
+        - pre-deploy
+        - post-deploy
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    name: Quality Gate Analysis
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    # Pre-commit quality gate
+    - name: Pre-commit Quality Gate
+      if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'pre-commit'
+        risk-assessment: 'true'
+        deployment-analysis: 'false'
+        fail-on-issues: 'true'
+        severity-threshold: 'high'
+        create-pr-comment: 'false'
+        create-check-run: 'true'
+    
+    # Pre-merge quality gate (for PRs)
+    - name: Pre-merge Quality Gate  
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'pre-merge'
+        risk-assessment: 'true'
+        deployment-analysis: 'true'
+        fail-on-issues: 'true'
+        severity-threshold: 'medium'
+        create-pr-comment: 'true'
+        create-check-run: 'true'
+        output-format: 'sarif'
+    
+    # Pre-deploy quality gate (for main branch)
+    - name: Pre-deploy Quality Gate
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'pre-deploy'
+        risk-assessment: 'true'
+        deployment-analysis: 'true'
+        fail-on-issues: 'true'
+        severity-threshold: 'medium'
+        create-check-run: 'true'
+        output-format: 'sarif'
+        kirolinter-endpoint: ${{ vars.KIROLINTER_ENDPOINT }}
+        kirolinter-token: ${{ secrets.KIROLINTER_TOKEN }}
+    
+    # Manual quality gate (workflow_dispatch)
+    - name: Manual Quality Gate
+      if: github.event_name == 'workflow_dispatch'
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: ${{ github.event.inputs.gate_type }}
+        risk-assessment: 'true'
+        deployment-analysis: 'true'
+        fail-on-issues: 'false'  # Don't fail on manual runs
+        create-pr-comment: 'false'
+        create-check-run: 'true'
+        output-format: 'json'
+    
+    # Upload SARIF results to GitHub Security tab
+    - name: Upload SARIF results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: kirolinter-results.sarif
+        category: 'KiroLinter DevOps'
+      continue-on-error: true
+    
+    # Archive quality reports
+    - name: Archive Quality Reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-reports-${{ github.run_number }}
+        path: |
+          kirolinter-results.sarif
+          *.json
+          *.md
+        retention-days: 30
+
+  deployment:
+    needs: quality-gate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    name: Deploy Application
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Simulate Deployment
+      run: |
+        echo "🚀 Deploying application..."
+        sleep 5
+        echo "✅ Deployment successful!"
+    
+    # Post-deploy quality gate
+    - name: Post-deploy Quality Gate
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'post-deploy'
+        risk-assessment: 'false'
+        deployment-analysis: 'false'
+        fail-on-issues: 'false'  # Don't fail deployment on post-deploy issues
+        create-check-run: 'true'
+        severity-threshold: 'low'
+      continue-on-error: true  # Allow to continue even if post-deploy checks fail

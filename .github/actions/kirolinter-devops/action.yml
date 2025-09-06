@@ -1,0 +1,110 @@
+name: 'KiroLinter DevOps Quality Gate'
+description: 'Run KiroLinter DevOps quality gates with comprehensive CI/CD integration'
+author: 'KiroLinter Team'
+
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  gate-type:
+    description: 'Type of quality gate to run (pre-commit, pre-merge, pre-deploy, post-deploy)'
+    required: true
+    default: 'pre-merge'
+  
+  risk-assessment:
+    description: 'Enable AI-powered risk assessment'
+    required: false
+    default: 'true'
+  
+  deployment-analysis:
+    description: 'Enable deployment impact analysis'
+    required: false
+    default: 'true'
+  
+  fail-on-issues:
+    description: 'Fail the action if critical issues are found'
+    required: false
+    default: 'true'
+  
+  github-token:
+    description: 'GitHub token for API access'
+    required: false
+    default: ${{ github.token }}
+  
+  kirolinter-endpoint:
+    description: 'KiroLinter API endpoint URL'
+    required: false
+    default: 'https://api.kirolinter.dev'
+  
+  kirolinter-token:
+    description: 'KiroLinter API token'
+    required: false
+  
+  config-path:
+    description: 'Path to KiroLinter configuration file'
+    required: false
+    default: '.kirolinter.yml'
+  
+  output-format:
+    description: 'Output format (json, markdown, sarif)'
+    required: false
+    default: 'markdown'
+  
+  create-pr-comment:
+    description: 'Create PR comment with quality report'
+    required: false
+    default: 'true'
+  
+  create-check-run:
+    description: 'Create GitHub check run'
+    required: false
+    default: 'true'
+  
+  severity-threshold:
+    description: 'Minimum severity to report (low, medium, high, critical)'
+    required: false
+    default: 'medium'
+  
+  timeout:
+    description: 'Analysis timeout in seconds'
+    required: false
+    default: '300'
+
+outputs:
+  quality-score:
+    description: 'Overall quality score (0-100)'
+  
+  issues-found:
+    description: 'Number of issues found'
+  
+  critical-issues:
+    description: 'Number of critical issues'
+  
+  high-issues:
+    description: 'Number of high severity issues'
+  
+  medium-issues:
+    description: 'Number of medium severity issues'
+  
+  low-issues:
+    description: 'Number of low severity issues'
+  
+  risk-score:
+    description: 'Deployment risk score (0-100)'
+  
+  passed:
+    description: 'Whether the quality gate passed (true/false)'
+  
+  report-url:
+    description: 'URL to detailed quality report'
+  
+  sarif-file:
+    description: 'Path to SARIF report file'
+  
+  check-run-id:
+    description: 'ID of created GitHub check run'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

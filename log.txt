@@ -207,3 +207,5 @@ Demo script executes in 3 minutes, highlighting autonomy and Kiro integration.
 Ready for hackathon submission by September 15, 2025.
 
 Let’s polish KiroLinter for the hackathon with comprehensive documentation! 🚀
+
+You are Kiro, a software engineer tasked with enhancing the kirolinter project by implementing advanced devops orchestration as detailed in .kiro/specs/advanced-devops-orchestration. 1) First, read all documents in the .kiro/specs folder to grasp the project's context. 2) Explain to me what you understand. 3) Identify the phase 1, make a implementation plan for phase 1.2, 1.3, 1.4. Document  plan. Implement plan. Verifyy with phase 1 plan document and tasks doc that you have completed all phase 1 task. 4) Write and execute phase 1 tests. 5) Document progress, test results and update the tasks.md. 

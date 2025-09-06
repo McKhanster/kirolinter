@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: kirolinter-postgres
+    environment:
+      POSTGRES_DB: kirolinter_devops
+      POSTGRES_USER: kirolinter
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./kirolinter/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kirolinter -d kirolinter_devops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Message Broker
   redis:
     image: redis:7-alpine
     container_name: kirolinter-redis
@@ -15,5 +36,154 @@ services:
       timeout: 3s
       retries: 5
 
+  # KiroLinter DevOps API
+  kirolinter-api:
+    build: .
+    container_name: kirolinter-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirolinter_devops
+      - POSTGRES_USER=kirolinter
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m kirolinter.api.main
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker - Workflow Processing
+  celery-workflow:
+    build: .
+    container_name: kirolinter-celery-workflow
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirolinter_devops
+      - POSTGRES_USER=kirolinter
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A kirolinter.workers.celery_app worker --loglevel=info --queues=workflow --concurrency=2 --hostname=workflow@%h
+
+  # Celery Worker - Analytics Processing
+  celery-analytics:
+    build: .
+    container_name: kirolinter-celery-analytics
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirolinter_devops
+      - POSTGRES_USER=kirolinter
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A kirolinter.workers.celery_app worker --loglevel=info --queues=analytics --concurrency=2 --hostname=analytics@%h
+
+  # Celery Worker - Monitoring
+  celery-monitoring:
+    build: .
+    container_name: kirolinter-celery-monitoring
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirolinter_devops
+      - POSTGRES_USER=kirolinter
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A kirolinter.workers.celery_app worker --loglevel=info --queues=monitoring,notifications --concurrency=2 --hostname=monitoring@%h
+
+  # Celery Beat Scheduler (for periodic tasks)
+  celery-beat:
+    build: .
+    container_name: kirolinter-celery-beat
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirolinter_devops
+      - POSTGRES_USER=kirolinter
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A kirolinter.workers.celery_app beat --loglevel=info
+
+  # Flower - Celery Monitoring
+  flower:
+    build: .
+    container_name: kirolinter-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - PYTHONPATH=/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    command: celery -A kirolinter.workers.celery_app flower --port=5555
+
 volumes:
+  postgres_data:
   redis_data:

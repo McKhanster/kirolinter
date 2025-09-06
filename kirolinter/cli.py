@@ -3,6 +3,7 @@
 KiroLinter CLI - AI-driven code review tool
 """
 
+import asyncio
 import click
 import json
 import os
@@ -243,6 +244,136 @@ def agent():
 def daemon():
     """Background daemon commands for continuous monitoring."""
     pass
+
+
+# DevOps Orchestration Commands
+@cli.group()
+def devops():
+    """DevOps orchestration and workflow management commands."""
+    pass
+
+
+@devops.command()
+@click.option('--check-db', is_flag=True, help='Check database connectivity')
+@click.option('--check-redis', is_flag=True, help='Check Redis connectivity')
+@click.option('--check-all', is_flag=True, help='Check all infrastructure')
+def health(check_db: bool, check_redis: bool, check_all: bool):
+    """Check DevOps infrastructure health"""
+    
+    async def run_health_checks():
+        from kirolinter.database.connection import get_db_manager
+        from kirolinter.cache.redis_client import get_redis_manager
+        
+        results = {}
+        
+        if check_all or check_db:
+            click.echo("Checking database connectivity...")
+            db_manager = get_db_manager()
+            await db_manager.initialize()
+            db_health = await db_manager.check_health()
+            results['database'] = db_health
+            
+            if db_health['healthy']:
+                click.echo(f"✅ Database: Healthy (query time: {db_health['query_time_seconds']:.3f}s)")
+            else:
+                click.echo(f"❌ Database: {db_health['error']}")
+            
+            await db_manager.close()
+        
+        if check_all or check_redis:
+            click.echo("Checking Redis connectivity...")
+            redis_manager = get_redis_manager()
+            await redis_manager.initialize()
+            redis_health = await redis_manager.check_health()
+            results['redis'] = redis_health
+            
+            if redis_health['healthy']:
+                click.echo(f"✅ Redis: Healthy (ping time: {redis_health['ping_time_seconds']:.3f}s)")
+            else:
+                click.echo(f"❌ Redis: {redis_health['error']}")
+            
+            await redis_manager.close()
+        
+        if not any([check_db, check_redis, check_all]):
+            click.echo("Please specify --check-db, --check-redis, or --check-all")
+            return
+        
+        # Overall status
+        all_healthy = all(
+            result.get('healthy', False) 
+            for result in results.values()
+        )
+        
+        if all_healthy:
+            click.echo("\n🎉 All infrastructure components are healthy!")
+        else:
+            click.echo("\n⚠️  Some infrastructure components have issues")
+        
+        return results
+    
+    return asyncio.run(run_health_checks())
+
+
+@devops.command()
+def init():
+    """Initialize DevOps infrastructure"""
+    
+    async def initialize():
+        from kirolinter.database.connection import get_db_manager
+        from kirolinter.cache.redis_client import get_redis_manager
+        from kirolinter.database.migrations.migration_manager import get_migration_manager
+        
+        click.echo("🚀 Initializing DevOps infrastructure...")
+        
+        # Initialize database
+        click.echo("1. Initializing database connection...")
+        db_manager = get_db_manager()
+        db_success = await db_manager.initialize()
+        
+        if not db_success:
+            click.echo("❌ Database initialization failed")
+            return False
+        
+        # Run migrations
+        click.echo("2. Running database migrations...")
+        migration_manager = await get_migration_manager()
+        migration_result = await migration_manager.migrate_to_latest()
+        
+        if not migration_result['success']:
+            click.echo("❌ Database migration failed")
+            await db_manager.close()
+            return False
+        
+        # Initialize Redis
+        click.echo("3. Initializing Redis connection...")
+        redis_manager = get_redis_manager()
+        redis_success = await redis_manager.initialize()
+        
+        if not redis_success:
+            click.echo("❌ Redis initialization failed")
+            await db_manager.close()
+            return False
+        
+        # Test connectivity
+        click.echo("4. Testing connectivity...")
+        db_health = await db_manager.check_health()
+        redis_health = await redis_manager.check_health()
+        
+        if db_health['healthy'] and redis_health['healthy']:
+            click.echo("✅ DevOps infrastructure initialized successfully!")
+            click.echo(f"   Database: {db_health['pool_size']} connections")
+            click.echo(f"   Redis: {redis_health['redis_version']}")
+            click.echo(f"   Migrations: {migration_result['applied_count']} applied")
+        else:
+            click.echo("⚠️  Infrastructure initialized but some components have issues")
+        
+        # Cleanup
+        await db_manager.close()
+        await redis_manager.close()
+        
+        return True
+    
+    return asyncio.run(initialize())
 
 
 @agent.command('review')

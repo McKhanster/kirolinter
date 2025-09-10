@@ -45,16 +45,20 @@ redis-server --daemonize yes
 git clone https://github.com/yourusername/kirolinter.git
 cd kirolinter
 
-# Option A: Install with all features (recommended)
+# Method 1: Install with pip (recommended)
+# Option A: Install with all features
 pip install -e ".[ai,devops]"
 
 # Option B: Install basic version only
 # pip install -e .
 
-# Option C: Install with AI features only  
-# pip install -e ".[ai]"
+# Method 2: Install from requirements.txt (alternative)
+# pip install -r requirements.txt
+# pip install -e .
 
 # Verify installation
+python -m kirolinter --version
+# OR
 kirolinter --version
 ```
 

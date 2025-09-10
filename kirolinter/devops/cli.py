@@ -312,5 +312,71 @@ def init():
     return asyncio.run(initialize())
 
 
+@devops.group()
+def git_monitor():
+    """Git monitoring commands"""
+    pass
+
+
+@git_monitor.command()
+@click.option('--repo', default='.', help='Repository path to monitor')
+@click.option('--events', default='all', help='Events to monitor (all, commits, branches, tags)')
+@click.option('--interval', default=30, help='Monitoring interval in seconds')
+def start(repo: str, events: str, interval: int):
+    """Start Git repository monitoring"""
+    async def run_monitor():
+        from .integrations.git_events import GitEventDetector
+        from .analytics.dashboard import GitOpsMonitoringDashboard
+        
+        click.echo(f"🔍 Starting Git monitoring for {repo}")
+        click.echo(f"📊 Monitoring events: {events}")
+        click.echo(f"⏱️  Check interval: {interval}s")
+        
+        detector = GitEventDetector()
+        dashboard = GitOpsMonitoringDashboard()
+        
+        try:
+            while True:
+                events_found = await detector.detect_events(repo)
+                if events_found:
+                    click.echo(f"📋 Found {len(events_found)} new events")
+                    for event in events_found:
+                        click.echo(f"   • {event.event_type.value}: {event.message or event.branch or 'N/A'}")
+                
+                await asyncio.sleep(interval)
+                
+        except KeyboardInterrupt:
+            click.echo("\n🛑 Stopping Git monitor...")
+    
+    asyncio.run(run_monitor())
+
+
+@devops.command()
+@click.option('--host', default='0.0.0.0', help='Dashboard host')
+@click.option('--port', default=8000, help='Dashboard port')
+def dashboard(host: str, port: int):
+    """Launch monitoring dashboard"""
+    async def run_dashboard():
+        from .analytics.dashboard import GitOpsMonitoringDashboard
+        
+        click.echo(f"🚀 Starting GitOps Dashboard on http://{host}:{port}")
+        click.echo("📊 Dashboard features:")
+        click.echo("   • Real-time Git events")
+        click.echo("   • System health metrics")
+        click.echo("   • Workflow monitoring")
+        click.echo("   • API endpoints")
+        
+        dashboard = GitOpsMonitoringDashboard()
+        
+        try:
+            await dashboard.start_server(host=host, port=port)
+        except KeyboardInterrupt:
+            click.echo("\n🛑 Stopping dashboard...")
+        except Exception as e:
+            click.echo(f"❌ Dashboard error: {e}")
+    
+    asyncio.run(run_dashboard())
+
+
 if __name__ == '__main__':
     devops()

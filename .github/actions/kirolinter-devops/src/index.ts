@@ -218,7 +218,6 @@ class KiroLinterDevOpsAction {
           core.warning(data.toString());
         }
       },
-      timeout: this.config.timeout * 1000,
       ignoreReturnCode: true
     });
 

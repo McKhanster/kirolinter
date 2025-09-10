@@ -162,6 +162,12 @@ kirolinter daemon start --interval=3600  # Every hour
 # If not, install them:
 # pip install -e ".[devops]"
 
+# Initialize DevOps infrastructure
+kirolinter devops init
+
+# Check system health
+kirolinter devops health --check-all
+
 # Start GitOps monitoring
 kirolinter devops git-monitor start --repo=. --events=all
 
@@ -169,7 +175,7 @@ kirolinter devops git-monitor start --repo=. --events=all
 kirolinter devops dashboard --host=0.0.0.0 --port=8000
 # Visit: http://localhost:8000/dashboard
 
-# Set up CI/CD platform integration (optional)
+# Set up GitHub integration (optional)
 export GITHUB_TOKEN="your-github-token"
 export GITLAB_TOKEN="your-gitlab-token"
 ```
@@ -487,6 +493,27 @@ kirolinter devops --help
 kirolinter debug system-info
 kirolinter debug agent-status
 ```
+
+---
+
+## 🛠️ Development & Building
+
+### Building GitHub Actions
+
+If you're contributing to the GitHub Actions or they need rebuilding:
+
+```bash
+# Navigate to the action directory
+cd .github/actions/kirolinter-devops
+
+# Install dependencies
+npm install
+
+# Build the action
+npm run build
+```
+
+This creates the `dist/index.js` file required for the GitHub Action to run.
 
 ---
 

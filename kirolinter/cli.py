@@ -529,10 +529,28 @@ def agent_workflow(repo: str, mode: str, auto_apply: bool, create_pr: bool,
         if result.get("success", False):
             click.echo("🎉 AI Agent Workflow completed successfully!")
             
-            # Display comprehensive summary
+            # Display AI-generated insights
             if "review" in result["results"]:
-                review = result["results"]["review"]["results"]["analysis"]
-                click.echo(f"📊 Analysis: {review.get('total_issues_found', 0)} issues in {review.get('total_files_analyzed', 0)} files")
+                review_results = result["results"]["review"]["results"]
+                analysis = review_results.get("analysis", {})
+                
+                # Show basic stats
+                click.echo(f"📊 Analysis: {analysis.get('total_issues_found', 0)} issues in {analysis.get('total_files_analyzed', 0)} files")
+                
+                # Display AI insights if available
+                if "insights" in review_results:
+                    insights = review_results["insights"]
+                    click.echo("\n🤖 AI Analysis:")
+                    click.echo("=" * 60)
+                    click.echo(insights)
+                
+                # Display AI report if available
+                if "report" in review_results:
+                    report = review_results["report"]
+                    if "ai_summary" in report:
+                        click.echo("\n📋 AI Review Report:")
+                        click.echo("=" * 60)
+                        click.echo(report["ai_summary"])
             
             if "fixes" in result["results"]:
                 fixes = result["results"]["fixes"]["results"]

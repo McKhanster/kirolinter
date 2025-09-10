@@ -81,7 +81,7 @@ export XAI_API_KEY="your-key-here"
 ### Step 4: First Analysis (30 seconds)
 
 ```bash
-# Analyze current directory
+# Traditional rule-based analysis (fast, no AI)
 kirolinter analyze . --format=summary
 
 # OR analyze a specific file

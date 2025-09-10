@@ -516,7 +516,11 @@ def agent_workflow(repo: str, mode: str, auto_apply: bool, create_pr: bool,
         provider_name = None if model == 'auto' else model
         coordinator = CoordinatorAgent(model=None, provider=provider_name, verbose=verbose)
         
-        # Execute autonomous improvement workflow
+        # Execute AI workflow with progress indication
+        if not verbose:
+            click.echo("📊 Step 1: Analyzing code patterns...")
+            click.echo("🤖 Step 2: Generating AI insights (this may take 10-30 seconds)...")
+        
         result = coordinator.execute_workflow(
             "autonomous_improvement",
             repo_path=repo,

@@ -1,6 +1,6 @@
 # KiroLinter Quickstart Guide ⚡
 
-**Get up and running with KiroLinter's autonomous AI code review system in 5 minutes!**
+**Get up and running with KiroLinter's AI-powered code analysis in 5 minutes!**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/Tests-190%2B%20passing-brightgreen.svg)](tests/)
@@ -10,14 +10,14 @@
 
 ## 🚀 What is KiroLinter?
 
-KiroLinter is the **world's first autonomous AI agentic system** for code review. It uses 5 core AI agents (plus a cross-repo learner) that work together to:
+KiroLinter is an **AI-powered code analysis tool** that provides intelligent insights and recommendations. It offers both traditional static analysis and AI-enhanced workflows:
 
-- 🤖 **Autonomously analyze** your code 24/7
-- 🧠 **Learn your team's style** from commit history
-- 🔧 **Apply safe fixes** automatically
-- 🔗 **Manage GitHub PRs** and code reviews
-- 📊 **Orchestrate CI/CD pipelines** with DevOps integration
-- 🛡️ **Enterprise-grade security** with audit trails
+- 🔍 **Static analysis** with traditional rule-based scanning
+- 🤖 **AI-powered insights** using LLM analysis for code quality assessment
+- 📊 **Detailed recommendations** with priority ranking and actionable steps
+- 🔧 **Smart suggestions** for code improvements and security fixes
+- 📋 **Executive summaries** and comprehensive reports
+- 🛡️ **Security vulnerability analysis** with specific remediation guidance
 
 ## ⏱️ 5-Minute Setup
 
@@ -88,21 +88,21 @@ kirolinter analyze . --format=summary
 kirolinter analyze path/to/your/file.py --format=detailed
 ```
 
-### Step 5: Enable Autonomous Mode (1 minute)
+### Step 5: Run AI-Powered Analysis (1 minute)
 
 ```bash
-# Ensure Redis is running (required for autonomous mode)
+# Ensure Redis is running (required for AI features)
 redis-server --daemonize yes
 # OR with Docker: docker start redis-kirolinter
 
-# Start autonomous workflow (learns + analyzes + fixes)
-kirolinter agent workflow --repo=. --auto-apply
+# Run AI-powered analysis with detailed insights
+kirolinter agent workflow --repo=. --verbose
 
-# Start background monitoring
-kirolinter daemon start --interval=3600
+# For automated fixes (user approval required)
+kirolinter agent workflow --repo=. --auto-apply
 ```
 
-🎉 **You're done!** KiroLinter is now autonomously managing your code quality.
+🎉 **You're done!** KiroLinter can now provide AI-powered code analysis and recommendations.
 
 ---
 
@@ -129,29 +129,29 @@ export GITHUB_REPO="owner/repository"
 # Analyze and comment on PR
 kirolinter analyze . --github-pr=123 --format=summary
 
-# Full GitHub workflow automation
+# AI-enhanced GitHub workflow
 kirolinter agent workflow --repo=. --create-pr --auto-apply
 ```
 
-### 3. Autonomous Workflows
+### 3. AI-Powered Workflows
 
-**⚠️ Redis Required**: Autonomous workflows require Redis for pattern memory and agent coordination.
+**⚠️ Redis Required**: AI workflows require Redis for pattern memory and analysis coordination.
 
 ```bash
-# Ensure Redis is running (required for autonomous features)
+# Ensure Redis is running (required for AI features)
 # Option 1: Local Redis
 redis-server --daemonize yes
 
 # Option 2: Docker Redis (if you prefer Docker)
 docker run -d --name redis-kirolinter -p 6379:6379 redis:alpine
 
-# Start learning from your team's patterns
+# Analyze patterns from your team's code history
 kirolinter agent learn --repo=. --commits=100
 
-# Run full autonomous workflow
-kirolinter agent workflow --repo=. --mode=autonomous --auto-apply
+# Run AI-powered analysis workflow
+kirolinter agent workflow --repo=. --auto-apply --verbose
 
-# Enable continuous monitoring
+# Enable scheduled monitoring
 kirolinter daemon start --interval=3600  # Every hour
 ```
 
@@ -183,15 +183,15 @@ kirolinter analyze . --dry-run --interactive-fixes
 # Apply fixes interactively
 kirolinter analyze . --interactive-fixes
 
-# Auto-apply safe fixes only (95% confidence threshold)
+# AI-powered fixes with confidence scoring
 kirolinter agent workflow --repo=. --auto-apply
 ```
 
 ---
 
-## 🤖 Understanding the Agent System
+## 🤖 Understanding the AI Analysis System
 
-KiroLinter uses 5 core AI agents plus a cross-repo learner that work together autonomously:
+KiroLinter uses AI-powered analysis to provide intelligent code insights and recommendations:
 
 ### Agent Architecture
 ```
@@ -373,17 +373,17 @@ $ kirolinter analyze . --format=summary
 🤖 AI-powered suggestions: 8/12 issues have auto-fixes available
 ```
 
-### Autonomous Workflow Output
+### AI-Powered Workflow Output
 ```bash
-$ kirolinter agent workflow --repo=. --auto-apply
+$ kirolinter agent workflow --repo=. --auto-apply --verbose
 
-🤖 Starting Autonomous Workflow
+🤖 Starting AI Analysis Workflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[Learner Agent] Learning from 50 commits... ✅
-[Reviewer Agent] Analyzing 45 files... ✅
-[Fixer Agent] Applying 8 safe fixes... ✅
-[Integrator Agent] Creating PR #123... ✅
+[AI Analysis] Analyzing code patterns... ✅
+[AI Review] Generating insights and recommendations... ✅
+[Smart Fixes] Identifying safe improvements... ✅
+[Report] Creating comprehensive summary... ✅
 
 📈 Results:
    • Issues found: 12
@@ -392,7 +392,7 @@ $ kirolinter agent workflow --repo=. --auto-apply
    • PR created: https://github.com/owner/repo/pull/123
    • Learning patterns: 23 new patterns discovered
 
-🎯 Next autonomous run: 2025-01-15 14:30:00
+🎯 Next analysis scheduled: 2025-01-15 14:30:00
 ```
 
 ---
@@ -541,9 +541,9 @@ nohup kirolinter daemon start --interval=1800 --log-file=/var/log/kirolinter.log
 
 ## 🎉 You're Ready!
 
-**KiroLinter is now managing your code quality autonomously.**
+**KiroLinter is now providing AI-powered code analysis and recommendations.**
 
-🤖 **Multi-Agent System** • 🧠 **Continuously Learning** • 🛡️ **Enterprise Safe** • ⚡ **Blazing Fast**
+🤖 **AI-Powered Analysis** • 📊 **Detailed Insights** • 🛡️ **Security-Focused** • ⚡ **Fast Analysis**
 
 ---
 

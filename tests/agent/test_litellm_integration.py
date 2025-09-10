@@ -190,7 +190,7 @@ def main():
     
     # Test xAI Grok if available
     if "xai" in available_providers:
-        model_name = os.getenv("XAI_MODEL_NAME", "grok-beta")
+        model_name = os.getenv("XAI_MODEL_NAME", "grok-code-fast-1")
         # Add xai/ prefix if not already present
         if not model_name.startswith("xai/"):
             model_name = f"xai/{model_name}"

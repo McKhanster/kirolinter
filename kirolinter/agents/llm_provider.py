@@ -25,18 +25,19 @@ class LiteLLMProvider(LLM):
     LangChain-compatible LLM provider using LiteLLM.
     
     Supports multiple LLM providers:
-    - xAI Grok: "grok-beta"
+    - xAI Grok: "xai/grok-code-fast-1"
     - Ollama: "ollama/llama2", "ollama/codellama", etc.
     - OpenAI: "gpt-4", "gpt-3.5-turbo"
     - Anthropic: "claude-3-sonnet-20240229"
     - And many more via LiteLLM
     """
     
-    model: str = Field(default="grok-beta", description="Model name for LiteLLM")
+    model: str = Field(default="xai/grok-code-fast-1", description="Model name for LiteLLM")
     temperature: float = Field(default=0.1, description="Temperature for generation")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     api_base: Optional[str] = Field(default=None, description="API base URL for custom endpoints")
     api_key: Optional[str] = Field(default=None, description="API key for the model")
+    verbose: bool = Field(default=False, description="Enable verbose/debug mode")
     
     def __init__(self, **kwargs):
         """Initialize LiteLLM provider with environment variables."""
@@ -63,9 +64,17 @@ class LiteLLMProvider(LLM):
                     self.api_key = os.getenv(env_key)
                     break
         
-        # Configure LiteLLM
+        # Configure LiteLLM based on verbose mode
         if self.api_key:
-            os.environ["LITELLM_LOG"] = "INFO"  # Enable logging for debugging
+            if self.verbose:
+                # Enable debug mode only when verbose is requested
+                os.environ["LITELLM_LOG"] = "DEBUG"  
+                litellm.set_verbose = True  
+                litellm._turn_on_debug()
+            else:
+                # Use minimal logging in non-verbose mode
+                os.environ["LITELLM_LOG"] = "ERROR"
+                litellm.set_verbose = False
     
     @property
     def _llm_type(self) -> str:
@@ -153,7 +162,7 @@ class LiteLLMProvider(LLM):
     def get_available_models(cls) -> Dict[str, List[str]]:
         """Get list of available models by provider."""
         return {
-            "xai": ["xai/grok-3-mini"],  # Cost-effective option
+            "xai": ["xai/grok-code-fast-1", "xai/grok-3-mini"],  # Latest code-optimized model
             "ollama": [
                 "ollama/llama3.1:8b",
                 "ollama/gemma3n:e4b", 
@@ -203,16 +212,18 @@ def create_llm_provider(
     provider: Optional[str] = None,
     temperature: float = 0.1,
     max_tokens: Optional[int] = None,
+    verbose: bool = False,
     **kwargs
 ) -> LiteLLMProvider:
     """
     Factory function to create LLM provider with smart defaults.
     
     Args:
-        model: Specific model name (e.g., "grok-beta", "ollama/llama2")
+        model: Specific model name (e.g., "xai/grok-code-fast-1", "ollama/llama2")
         provider: Provider name (e.g., "xai", "ollama", "openai")
         temperature: Temperature for generation
         max_tokens: Maximum tokens to generate
+        verbose: Enable verbose/debug mode
         **kwargs: Additional arguments for LiteLLMProvider
     
     Returns:
@@ -229,6 +240,7 @@ def create_llm_provider(
             model=model,  # This can be None, create_for_provider will choose default
             temperature=temperature,
             max_tokens=max_tokens,
+            verbose=verbose,
             **kwargs
         )
     else:
@@ -240,7 +252,7 @@ def create_llm_provider(
             if not model:
                 # Smart defaults based on available API keys
                 if os.getenv("XAI_API_KEY"):
-                    xai_model = os.getenv("XAI_MODEL_NAME", "grok-beta")
+                    xai_model = os.getenv("XAI_MODEL_NAME", "grok-code-fast-1")
                     # Add xai/ prefix if not already present
                     model = xai_model if xai_model.startswith("xai/") else f"xai/{xai_model}"
                 elif os.getenv("OPENAI_API_KEY"):
@@ -256,5 +268,6 @@ def create_llm_provider(
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            verbose=verbose,
             **kwargs
         )

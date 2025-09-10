@@ -33,9 +33,13 @@ sudo apt install redis-server
 # macOS:
 brew install redis
 # Windows: Download from https://redis.io/downloads
+# Docker (cross-platform):
+# docker run -d --name redis-kirolinter -p 6379:6379 redis:alpine
 
 # Start Redis
 redis-server --daemonize yes
+# OR with Docker:
+# docker start redis-kirolinter
 ```
 
 ### Step 2: Install KiroLinter (1 minute)
@@ -87,6 +91,10 @@ kirolinter analyze path/to/your/file.py --format=detailed
 ### Step 5: Enable Autonomous Mode (1 minute)
 
 ```bash
+# Ensure Redis is running (required for autonomous mode)
+redis-server --daemonize yes
+# OR with Docker: docker start redis-kirolinter
+
 # Start autonomous workflow (learns + analyzes + fixes)
 kirolinter agent workflow --repo=. --auto-apply
 
@@ -127,7 +135,16 @@ kirolinter agent workflow --repo=. --create-pr --auto-apply
 
 ### 3. Autonomous Workflows
 
+**⚠️ Redis Required**: Autonomous workflows require Redis for pattern memory and agent coordination.
+
 ```bash
+# Ensure Redis is running (required for autonomous features)
+# Option 1: Local Redis
+redis-server --daemonize yes
+
+# Option 2: Docker Redis (if you prefer Docker)
+docker run -d --name redis-kirolinter -p 6379:6379 redis:alpine
+
 # Start learning from your team's patterns
 kirolinter agent learn --repo=. --commits=100
 

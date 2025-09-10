@@ -34,7 +34,7 @@ class ReviewerAgent:
         Initialize the Reviewer Agent with Phase 4 enhancements.
         
         Args:
-            model: LLM model name (e.g., "grok-beta", "ollama/llama2")
+            model: LLM model name (e.g., "xai/grok-code-fast-1", "ollama/llama2")
             provider: LLM provider (e.g., "xai", "ollama", "openai")
             memory: PatternMemory instance (Redis-based)
             verbose: Enable verbose logging
@@ -50,7 +50,8 @@ class ReviewerAgent:
                 model=model,
                 provider=provider,
                 temperature=0.1,
-                max_tokens=4000
+                max_tokens=4000,
+                verbose=verbose
             )
             
             if verbose:

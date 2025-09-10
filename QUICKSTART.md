@@ -45,8 +45,14 @@ redis-server --daemonize yes
 git clone https://github.com/yourusername/kirolinter.git
 cd kirolinter
 
-# Install with all features
+# Option A: Install with all features (recommended)
 pip install -e ".[ai,devops]"
+
+# Option B: Install basic version only
+# pip install -e .
+
+# Option C: Install with AI features only  
+# pip install -e ".[ai]"
 
 # Verify installation
 kirolinter --version
@@ -395,6 +401,22 @@ $ kirolinter agent workflow --repo=. --auto-apply
 ## 🚨 Troubleshooting
 
 ### Common Issues
+
+**Installation Warnings about Missing Extras:**
+```bash
+# If you see: WARNING: kirolinter 0.1.0 does not provide the extra 'ai'
+# This means you need to reinstall with the updated configuration:
+
+# Uninstall first
+pip uninstall kirolinter -y
+
+# Reinstall with extras  
+pip install -e ".[ai,devops]"
+
+# Or install just what you need:
+pip install -e ".[ai]"  # For AI features only
+pip install -e "."     # For basic functionality only
+```
 
 **Redis Connection Issues:**
 ```bash

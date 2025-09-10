@@ -9,3 +9,4 @@ kirolinter.egg-info/
 # Logs directory
 logs/
 *.log
+node_modules/

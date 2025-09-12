@@ -533,28 +533,29 @@ def agent_workflow(repo: str, mode: str, auto_apply: bool, create_pr: bool,
         if result.get("success", False):
             click.echo("🎉 AI Agent Workflow completed successfully!")
             
-            # Display AI-generated insights
-            if "review" in result["results"]:
-                review_results = result["results"]["review"]["results"]
-                analysis = review_results.get("analysis", {})
+            # Display analysis results and AI insights
+            if "results" in result:
+                results = result["results"]
                 
-                # Show basic stats
-                click.echo(f"📊 Analysis: {analysis.get('total_issues_found', 0)} issues in {analysis.get('total_files_analyzed', 0)} files")
+                # Show basic analysis stats
+                if "analysis" in results:
+                    analysis = results["analysis"]
+                    click.echo(f"📊 Analysis: {analysis.get('total_issues_found', 0)} issues in {analysis.get('total_files_analyzed', 0)} files")
                 
-                # Display AI insights if available
-                if "insights" in review_results:
-                    insights = review_results["insights"]
-                    click.echo("\n🤖 AI Analysis:")
-                    click.echo("=" * 60)
-                    click.echo(insights)
-                
-                # Display AI report if available
-                if "report" in review_results:
-                    report = review_results["report"]
+                # Display AI-powered review report
+                if "report" in results:
+                    report = results["report"]
                     if "ai_summary" in report:
-                        click.echo("\n📋 AI Review Report:")
-                        click.echo("=" * 60)
+                        click.echo("\n🤖 AI-Powered Code Review:")
+                        click.echo("=" * 70)
                         click.echo(report["ai_summary"])
+                        click.echo("=" * 70)
+                
+                # Display prioritization insights if available
+                if "prioritization" in results:
+                    prioritization = results["prioritization"]
+                    if "total_issues" in prioritization:
+                        click.echo(f"\n🎯 Prioritization: {prioritization['total_issues']} issues analyzed")
             
             if "fixes" in result["results"]:
                 fixes = result["results"]["fixes"]["results"]

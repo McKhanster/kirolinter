@@ -260,17 +260,20 @@ def health(check_redis: bool, check_all: bool):
     """Check DevOps infrastructure health (Redis-only mode)"""
     
     async def run_health_checks():
-        try:
-            from kirolinter.cache.redis_client import get_redis_manager
-        except ImportError:
-            click.echo("❌ Redis client not available")
-            return {"redis": {"healthy": False, "error": "Redis client not available"}}
-        
         results = {}
         
         if check_all or check_redis or not any([check_redis, check_all]):
             click.echo("Checking Redis connectivity...")
-            redis_manager = get_redis_manager()
+            try:
+                from kirolinter.cache.redis_client import get_redis_manager
+                redis_manager = get_redis_manager()
+            except ImportError:
+                click.echo("❌ Redis: Redis client not available")
+                return {"redis": {"healthy": False, "error": "Redis client not available"}}
+            
+            if redis_manager is None:
+                click.echo("❌ Redis: Redis client not available")
+                return {"redis": {"healthy": False, "error": "Redis client not available"}}
             
             try:
                 await redis_manager.initialize()
@@ -309,17 +312,20 @@ def init():
     """Initialize DevOps infrastructure (Redis-only mode)"""
     
     async def initialize():
-        try:
-            from kirolinter.cache.redis_client import get_redis_manager
-        except ImportError:
-            click.echo("❌ Redis client not available")
-            return False
-        
         click.echo("🚀 Initializing DevOps infrastructure (Redis-only mode)...")
         
         # Initialize Redis
         click.echo("1. Initializing Redis connection...")
-        redis_manager = get_redis_manager()
+        try:
+            from kirolinter.cache.redis_client import get_redis_manager
+            redis_manager = get_redis_manager()
+        except ImportError:
+            click.echo("❌ Redis client not available")
+            return False
+        
+        if redis_manager is None:
+            click.echo("❌ Redis client not available")
+            return False
         
         try:
             redis_success = await redis_manager.initialize()
@@ -352,6 +358,36 @@ def init():
     return asyncio.run(initialize())
 
 
+@devops.command()
+@click.option('--format', 'output_format', default='json', type=click.Choice(['json', 'yaml']), help='Output format')
+def config():
+    """Show current configuration (Redis-only mode)"""
+    
+    config_data = {
+        'redis': {
+            'host': 'localhost',
+            'port': 6379,
+            'db': 0,
+            'mode': 'demo'
+        },
+        'devops': {
+            'mode': 'redis_only',
+            'features': [
+                'git_monitoring',
+                'dashboard', 
+                'health_checks',
+                'workflow_orchestration'
+            ]
+        }
+    }
+    
+    if output_format == 'json':
+        click.echo(json.dumps(config_data, indent=2))
+    else:
+        import yaml
+        click.echo(yaml.dump(config_data, default_flow_style=False))
+
+
 @devops.group()
 def git_monitor():
     """Git monitoring commands"""
@@ -367,71 +403,74 @@ def start(repo: str, events: str, interval: int):
     async def run_monitor():
         try:
             from kirolinter.devops.integrations.git_events import GitEventDetector
+        except ImportError as e:
+            click.echo(f"❌ Git event detector not available: {e}")
+            return
+        except Exception as e:
+            click.echo(f"❌ Unexpected import error: {e}")
+            return
+        
+        click.echo(f"🔍 Starting Git monitoring for {repo}")
+        click.echo(f"📊 Monitoring events: {events}")
+        click.echo(f"⏱️  Check interval: {interval}s")
+        click.echo("Press Ctrl+C to stop monitoring...")
+        
+        # Get Redis manager for event storage
+        try:
+            from kirolinter.cache.redis_client import get_redis_manager
+            redis_manager = get_redis_manager()
+            redis_client = None
             
-            click.echo(f"🔍 Starting Git monitoring for {repo}")
-            click.echo(f"📊 Monitoring events: {events}")
-            click.echo(f"⏱️  Check interval: {interval}s")
-            click.echo("Press Ctrl+C to stop monitoring...")
-            
-            detector = GitEventDetector()
-            
-            # Add the repository to monitor
-            success = detector.add_repository(repo)
-            if not success:
-                click.echo(f"❌ Failed to add repository: {repo}")
-                return
-            
-            # Debug: Show what we're monitoring
-            repo_state = detector.monitored_repos.get(repo)
-            if repo_state:
-                click.echo("✅ Repository added to monitoring")
-                click.echo(f"   Current commit: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'}")
-                click.echo(f"   Tracked branches: {repo_state.tracked_branches}")
-            else:
-                click.echo("❌ Repository state not found")
-            
-            # Check for events periodically  
-            monitoring_started = False
-            while True:
+            if redis_manager:
                 try:
-                    # Actually detect new events by checking repo state
-                    repo_state = detector.monitored_repos.get(repo)
-                    if repo_state:
-                        # Get current commit for debugging
-                        import git as gitpython
-                        current_repo = gitpython.Repo(repo)
-                        current_commit = current_repo.head.commit.hexsha if current_repo.head.is_valid() else None
-                        
-                        if not monitoring_started:
-                            click.echo(f"📊 Monitoring active, waiting for Git events...")
-                            click.echo(f"   Watching commit: {current_commit[:8] if current_commit else 'None'}")
-                            monitoring_started = True
-                        
-                        # Check if commit changed for debugging
-                        if current_commit and repo_state.last_commit_hash != current_commit:
-                            click.echo(f"🔄 Commit changed: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'} -> {current_commit[:8]}")
-                        
-                        new_events = await detector._detect_events(repo, repo_state)
-                        if new_events:
-                            click.echo(f"📋 Found {len(new_events)} new events")
-                            for event in new_events:
-                                event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
-                                click.echo(f"   • {event.event_type.value}: {event_desc}")
-                                # Emit event to handlers
-                                await detector._emit_event(event)
-                    
-                    await asyncio.sleep(interval)
-                    
-                except Exception as check_error:
-                    click.echo(f"⚠️  Check error: {check_error}")
-                    await asyncio.sleep(interval)
+                    await redis_manager.initialize()
+                    redis_client = redis_manager
+                    click.echo("✅ Redis connected for event storage")
+                except Exception as e:
+                    click.echo(f"⚠️  Redis unavailable, using memory-only mode: {e}")
+        except ImportError:
+            click.echo("⚠️  Redis client not available, using memory-only mode")
+            redis_client = None
+        
+        detector = GitEventDetector(redis_client=redis_client)
+        
+        # Add the repository to monitor
+        if not detector.add_repository(repo):
+            click.echo("❌ Failed to add repository for monitoring")
+            return
+        
+        # Get the actual key used by add_repository (resolved path)
+        from pathlib import Path
+        repo_key = str(Path(repo).resolve())
+        
+        click.echo("✅ Repository added to monitoring")
+        
+        try:
+            event_count = 0
+            while True:
+                # Check for events manually since we're not using the automatic polling
+                repo_state = detector.monitored_repos.get(repo_key)
+                if repo_state:
+                    events_found = await detector._detect_events(repo_key, repo_state)
+                    if events_found:
+                        click.echo(f"📋 Found {len(events_found)} new events")
+                        for event in events_found:
+                            event_count += 1
+                            click.echo(f"   • {event.event_type.value}: {event.message or event.branch or 'N/A'}")
+                            # Emit event to handlers
+                            await detector._emit_event(event)
+                    elif event_count == 0:
+                        # First run, show status
+                        click.echo("📊 Monitoring active, waiting for Git events...")
+                        event_count = -1  # Mark as initialized
+                
+                await asyncio.sleep(interval)
                 
         except KeyboardInterrupt:
             click.echo("\n🛑 Stopping Git monitor...")
-        except ImportError:
-            click.echo("❌ DevOps system not available. Install with: pip install -e \".[devops]\"", err=True)
-        except Exception as e:
-            click.echo(f"❌ Monitor error: {e}", err=True)
+        finally:
+            if redis_client:
+                await redis_client.close()
     
     asyncio.run(run_monitor())
 
@@ -443,25 +482,64 @@ def dashboard(host: str, port: int):
     """Launch monitoring dashboard"""
     async def run_dashboard():
         try:
-            from kirolinter.devops.analytics.dashboard import GitOpsMonitoringDashboard
+            from kirolinter.devops.analytics.dashboard import DashboardMetricsCollector, GitOpsDashboard
+            from kirolinter.devops.integrations.git_events import GitEventDetector
+        except ImportError as e:
+            click.echo(f"❌ Dashboard components not available: {e}")
+            return
+        
+        click.echo(f"🚀 Starting GitOps Dashboard on http://{host}:{port}")
+        click.echo("📊 Dashboard features:")
+        click.echo("   • Real-time Git events")
+        click.echo("   • System health metrics")
+        click.echo("   • Workflow monitoring")
+        click.echo("   • API endpoints")
+        click.echo("Press Ctrl+C to stop dashboard...")
+        
+        # Initialize Redis connection
+        try:
+            from kirolinter.cache.redis_client import get_redis_manager
+            redis_manager = get_redis_manager()
+            redis_client = None
             
-            click.echo(f"🚀 Starting GitOps Dashboard on http://{host}:{port}")
-            click.echo("📊 Dashboard features:")
-            click.echo("   • Real-time Git events")
-            click.echo("   • System health metrics")
-            click.echo("   • Workflow monitoring")
-            click.echo("   • API endpoints")
-            click.echo("Press Ctrl+C to stop dashboard...")
+            if redis_manager:
+                try:
+                    await redis_manager.initialize()
+                    redis_client = redis_manager
+                    click.echo("✅ Redis connected for dashboard data")
+                except Exception as e:
+                    click.echo(f"⚠️  Redis unavailable, using demo mode: {e}")
+        except ImportError:
+            click.echo("⚠️  Redis client not available, using demo mode")
+            redis_client = None
+        
+        # Initialize components
+        git_detector = GitEventDetector(redis_client=redis_client)
+        metrics_collector = DashboardMetricsCollector(
+            redis_client=redis_client,
+            git_event_detector=git_detector
+        )
+        dashboard = GitOpsDashboard(metrics_collector, host=host, port=port)
+        
+        try:
+            await dashboard.start()
+            click.echo(f"✅ Dashboard running at http://{host}:{port}")
             
-            dashboard = GitOpsMonitoringDashboard()
-            await dashboard.start_server(host=host, port=port)
-            
+            # Keep running until interrupted
+            while True:
+                await asyncio.sleep(1)
+                
         except KeyboardInterrupt:
             click.echo("\n🛑 Stopping dashboard...")
-        except ImportError:
-            click.echo("❌ DevOps system not available. Install with: pip install -e \".[devops]\"", err=True)
         except Exception as e:
-            click.echo(f"❌ Dashboard error: {e}", err=True)
+            click.echo(f"❌ Dashboard error: {e}")
+        finally:
+            try:
+                await dashboard.stop()
+                if redis_client:
+                    await redis_client.close()
+            except:
+                pass
     
     asyncio.run(run_dashboard())
 

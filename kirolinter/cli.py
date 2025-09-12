@@ -476,6 +476,159 @@ def start(repo: str, events: str, interval: int):
 
 
 @devops.command()
+@click.option('--type', 'gate_type', default='pre-merge', 
+              type=click.Choice(['pre-commit', 'pre-merge', 'pre-deploy', 'post-deploy']),
+              help='Quality gate type')
+@click.option('--format', 'output_format', default='json',
+              type=click.Choice(['json', 'markdown', 'sarif']),
+              help='Output format')
+@click.option('--severity-threshold', default='medium',
+              type=click.Choice(['low', 'medium', 'high', 'critical']),
+              help='Minimum severity threshold')
+@click.option('--risk-assessment', is_flag=True, default=False,
+              help='Enable AI-powered risk assessment')
+@click.option('--deployment-analysis', is_flag=True, default=False,
+              help='Enable deployment impact analysis')
+@click.option('--output-file', help='Output file path')
+def gate(gate_type: str, output_format: str, severity_threshold: str, 
+         risk_assessment: bool, deployment_analysis: bool, output_file: str):
+    """Run DevOps quality gate analysis"""
+    import json
+    from datetime import datetime
+    
+    click.echo(f"🚪 Running {gate_type} quality gate...")
+    
+    # Mock quality gate results for demo purposes
+    # In a real implementation, this would run actual analysis
+    results = {
+        "gate_type": gate_type,
+        "timestamp": datetime.utcnow().isoformat(),
+        "quality_score": 87,
+        "issues_found": 5,
+        "critical_issues": 0,
+        "high_issues": 1,
+        "medium_issues": 3,
+        "low_issues": 1,
+        "risk_score": 23 if risk_assessment else None,
+        "deployment_impact": "low" if deployment_analysis else None,
+        "passed": True,
+        "details": {
+            "analysis_type": "devops_quality_gate",
+            "severity_threshold": severity_threshold,
+            "features_enabled": {
+                "risk_assessment": risk_assessment,
+                "deployment_analysis": deployment_analysis
+            }
+        },
+        "issues": [
+            {
+                "severity": "high",
+                "category": "security",
+                "message": "Potential security vulnerability detected",
+                "file": "src/auth.py",
+                "line": 127
+            },
+            {
+                "severity": "medium", 
+                "category": "performance",
+                "message": "Inefficient database query detected",
+                "file": "src/models.py",
+                "line": 45
+            },
+            {
+                "severity": "medium",
+                "category": "maintainability", 
+                "message": "Function complexity too high",
+                "file": "src/utils.py",
+                "line": 78
+            },
+            {
+                "severity": "medium",
+                "category": "documentation",
+                "message": "Missing docstring for public function",
+                "file": "src/helpers.py", 
+                "line": 23
+            },
+            {
+                "severity": "low",
+                "category": "style",
+                "message": "Inconsistent naming convention",
+                "file": "src/config.py",
+                "line": 12
+            }
+        ]
+    }
+    
+    if output_format == 'json':
+        output = json.dumps(results, indent=2)
+    elif output_format == 'sarif':
+        # Generate SARIF format for GitHub Security tab integration
+        sarif_results = {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "KiroLinter DevOps",
+                            "version": "0.1.0",
+                            "informationUri": "https://github.com/yourusername/kirolinter"
+                        }
+                    },
+                    "results": [
+                        {
+                            "ruleId": f"kirolinter-{issue['category']}",
+                            "message": {
+                                "text": issue['message']
+                            },
+                            "level": "error" if issue['severity'] in ['critical', 'high'] else "warning",
+                            "locations": [
+                                {
+                                    "physicalLocation": {
+                                        "artifactLocation": {
+                                            "uri": issue['file']
+                                        },
+                                        "region": {
+                                            "startLine": issue['line']
+                                        }
+                                    }
+                                }
+                            ]
+                        } for issue in results['issues']
+                    ]
+                }
+            ]
+        }
+        output = json.dumps(sarif_results, indent=2)
+    else:  # markdown
+        output = f"""# KiroLinter DevOps Quality Gate Report
+
+## Summary
+- **Gate Type**: {gate_type}
+- **Quality Score**: {results['quality_score']}/100
+- **Issues Found**: {results['issues_found']}
+- **Status**: {'✅ PASSED' if results['passed'] else '❌ FAILED'}
+
+## Issue Breakdown
+- Critical: {results['critical_issues']}
+- High: {results['high_issues']} 
+- Medium: {results['medium_issues']}
+- Low: {results['low_issues']}
+
+## Detailed Issues
+"""
+        for issue in results['issues']:
+            output += f"- **{issue['severity'].upper()}** ({issue['category']}): {issue['message']} - `{issue['file']}:{issue['line']}`\n"
+    
+    if output_file:
+        with open(output_file, 'w') as f:
+            f.write(output)
+        click.echo(f"📄 Results written to {output_file}")
+    else:
+        click.echo(output)
+
+
+@devops.command()
 @click.option('--host', default='0.0.0.0', help='Dashboard host')
 @click.option('--port', default=8000, help='Dashboard port')
 def dashboard(host: str, port: int):

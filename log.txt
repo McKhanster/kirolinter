@@ -1,1 +1,16 @@
-kirolinter agent workflow --repo=. --max-fixes=1
+Please review all the files here; kirolinter/devops. Here are the options; 
+kirolinter devops --help
+Usage: kirolinter devops [OPTIONS] COMMAND [ARGS]...
+
+  DevOps orchestration and workflow management commands.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  dashboard    Launch monitoring dashboard
+  git-monitor  Git monitoring commands
+  health       Check DevOps infrastructure health
+  init         Initialize DevOps infrastructure
+
+I would like to do some real-world testing. 

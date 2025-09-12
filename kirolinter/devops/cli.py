@@ -9,10 +9,13 @@ import json
 from typing import Optional
 from datetime import datetime
 
-from ..database.connection import get_db_manager
-from ..cache.redis_client import get_redis_manager
-from ..database.migrations.migration_manager import get_migration_manager
-from ..database.migrations.data_retention import get_data_retention_manager
+# Redis-only mode for demo - no PostgreSQL dependencies
+try:
+    from ..cache.redis_client import get_redis_manager
+except ImportError:
+    # Fallback for testing without cache module
+    def get_redis_manager():
+        return None
 
 
 @click.group()
@@ -22,46 +25,37 @@ def devops():
 
 
 @devops.command()
-@click.option('--check-db', is_flag=True, help='Check database connectivity')
 @click.option('--check-redis', is_flag=True, help='Check Redis connectivity')
-@click.option('--check-all', is_flag=True, help='Check all infrastructure')
-def health(check_db: bool, check_redis: bool, check_all: bool):
-    """Check infrastructure health"""
+@click.option('--check-all', is_flag=True, help='Check Redis connectivity (Redis-only mode)')
+def health(check_redis: bool, check_all: bool):
+    """Check infrastructure health (Redis-only mode)"""
     
     async def run_health_checks():
         results = {}
         
-        if check_all or check_db:
-            click.echo("Checking database connectivity...")
-            db_manager = get_db_manager()
-            await db_manager.initialize()
-            db_health = await db_manager.check_health()
-            results['database'] = db_health
-            
-            if db_health['healthy']:
-                click.echo(f"✅ Database: Healthy (query time: {db_health['query_time_seconds']:.3f}s)")
-            else:
-                click.echo(f"❌ Database: {db_health['error']}")
-            
-            await db_manager.close()
-        
-        if check_all or check_redis:
+        if check_all or check_redis or not any([check_redis, check_all]):
             click.echo("Checking Redis connectivity...")
             redis_manager = get_redis_manager()
-            await redis_manager.initialize()
-            redis_health = await redis_manager.check_health()
-            results['redis'] = redis_health
             
-            if redis_health['healthy']:
-                click.echo(f"✅ Redis: Healthy (ping time: {redis_health['ping_time_seconds']:.3f}s)")
-            else:
-                click.echo(f"❌ Redis: {redis_health['error']}")
+            if redis_manager is None:
+                click.echo("❌ Redis: Redis client not available")
+                return {"redis": {"healthy": False, "error": "Redis client not available"}}
             
-            await redis_manager.close()
-        
-        if not any([check_db, check_redis, check_all]):
-            click.echo("Please specify --check-db, --check-redis, or --check-all")
-            return
+            try:
+                await redis_manager.initialize()
+                redis_health = await redis_manager.check_health()
+                results['redis'] = redis_health
+                
+                if redis_health.get('healthy', False):
+                    ping_time = redis_health.get('ping_time_seconds', 0)
+                    click.echo(f"✅ Redis: Healthy (ping time: {ping_time:.3f}s)")
+                else:
+                    click.echo(f"❌ Redis: {redis_health.get('error', 'Unknown error')}")
+                
+                await redis_manager.close()
+            except Exception as e:
+                click.echo(f"❌ Redis: Connection failed - {str(e)}")
+                results['redis'] = {"healthy": False, "error": str(e)}
         
         # Overall status
         all_healthy = all(
@@ -70,180 +64,38 @@ def health(check_db: bool, check_redis: bool, check_all: bool):
         )
         
         if all_healthy:
-            click.echo("\n🎉 All infrastructure components are healthy!")
+            click.echo("\n🎉 Redis infrastructure is healthy!")
         else:
-            click.echo("\n⚠️  Some infrastructure components have issues")
+            click.echo("\n⚠️  Redis infrastructure has issues")
         
         return results
     
     return asyncio.run(run_health_checks())
 
 
-@devops.command()
-@click.option('--target-version', help='Target migration version (latest if not specified)')
-def migrate(target_version: Optional[str]):
-    """Run database migrations"""
-    
-    async def run_migrations():
-        click.echo("Running database migrations...")
-        
-        migration_manager = await get_migration_manager()
-        
-        if target_version:
-            result = await migration_manager.migrate_to_version(target_version)
-        else:
-            result = await migration_manager.migrate_to_latest()
-        
-        if result['success']:
-            click.echo(f"✅ Migrations completed: {result['applied_count']} migrations applied")
-        else:
-            click.echo(f"❌ Migration failed: {result.get('error', 'Unknown error')}")
-            if result.get('failed_migrations'):
-                click.echo(f"Failed migrations: {', '.join(result['failed_migrations'])}")
-        
-        return result
-    
-    return asyncio.run(run_migrations())
-
-
-@devops.command()
-def migration_status():
-    """Show migration status"""
-    
-    async def show_status():
-        migration_manager = await get_migration_manager()
-        status = await migration_manager.get_migration_status()
-        
-        click.echo(f"Current version: {status['current_version'] or 'None'}")
-        click.echo(f"Latest version: {status['latest_version'] or 'None'}")
-        click.echo(f"Applied migrations: {status['applied_count']}")
-        click.echo(f"Pending migrations: {status['pending_count']}")
-        click.echo(f"Up to date: {'Yes' if status['is_up_to_date'] else 'No'}")
-        
-        if status['validation']['valid']:
-            click.echo("✅ Migration validation: Passed")
-        else:
-            click.echo("❌ Migration validation: Failed")
-            for issue in status['validation']['issues']:
-                click.echo(f"  - {issue['message']}")
-        
-        if status['pending_migrations']:
-            click.echo("\nPending migrations:")
-            for migration in status['pending_migrations']:
-                click.echo(f"  - {migration['version']}: {migration['name']}")
-        
-        return status
-    
-    return asyncio.run(show_status())
-
-
-@devops.command()
-@click.option('--dry-run', is_flag=True, help='Simulate cleanup without deleting data')
-@click.option('--tables', help='Comma-separated list of tables to clean up')
-def cleanup(dry_run: bool, tables: Optional[str]):
-    """Clean up old data according to retention policies"""
-    
-    async def run_cleanup():
-        table_list = tables.split(',') if tables else None
-        
-        click.echo(f"Running data cleanup ({'dry run' if dry_run else 'live'})...")
-        
-        retention_manager = await get_data_retention_manager()
-        result = await retention_manager.cleanup_old_data(
-            dry_run=dry_run, 
-            table_names=table_list
-        )
-        
-        if result['success']:
-            click.echo(f"✅ Cleanup completed: {result['total_deleted']} records {'would be' if dry_run else ''} deleted")
-            
-            for table_name, table_result in result['table_results'].items():
-                if table_result.get('success'):
-                    count = table_result['deleted_count']
-                    click.echo(f"  - {table_name}: {count} records")
-                else:
-                    click.echo(f"  - {table_name}: Error - {table_result.get('error')}")
-        else:
-            click.echo(f"❌ Cleanup failed")
-            for error in result['errors']:
-                click.echo(f"  - {error}")
-        
-        return result
-    
-    return asyncio.run(run_cleanup())
-
-
-@devops.command()
-def data_stats():
-    """Show data statistics and cleanup recommendations"""
-    
-    async def show_stats():
-        retention_manager = await get_data_retention_manager()
-        
-        click.echo("Getting data statistics...")
-        statistics = await retention_manager.get_data_statistics()
-        
-        click.echo("Getting cleanup recommendations...")
-        recommendations = await retention_manager.get_cleanup_recommendations()
-        
-        # Show statistics
-        click.echo("\n📊 Data Statistics:")
-        for table_name, stats in statistics.items():
-            if 'error' in stats:
-                click.echo(f"  {table_name}: Error - {stats['error']}")
-                continue
-                
-            total = stats['total_records']
-            old = stats['old_records']
-            size_mb = stats['table_size_mb']
-            retention_days = stats['retention_days']
-            
-            click.echo(f"  {table_name}:")
-            click.echo(f"    Total records: {total:,}")
-            click.echo(f"    Old records: {old:,}")
-            click.echo(f"    Size: {size_mb:.1f} MB")
-            click.echo(f"    Retention: {retention_days} days")
-        
-        # Show recommendations
-        click.echo(f"\n💡 Cleanup Recommendations:")
-        click.echo(f"  Total old records: {recommendations['total_old_records']:,}")
-        click.echo(f"  Potential space savings: {recommendations['total_size_savings_mb']:.1f} MB")
-        
-        if recommendations['recommendations']:
-            for rec in recommendations['recommendations']:
-                priority_icon = "🔴" if rec['priority'] == 'high' else "🟡"
-                click.echo(f"  {priority_icon} {rec['message']}")
-        
-        if recommendations['tables_needing_cleanup']:
-            click.echo("\n  Tables needing cleanup:")
-            for table in recommendations['tables_needing_cleanup'][:5]:  # Top 5
-                click.echo(f"    - {table['table_name']}: {table['old_records']:,} old records ({table['percentage_old']:.1f}%)")
-        
-        return {'statistics': statistics, 'recommendations': recommendations}
-    
-    return asyncio.run(show_stats())
+# PostgreSQL-dependent commands removed for Redis-only demo mode
 
 
 @devops.command()
 @click.option('--format', 'output_format', default='json', type=click.Choice(['json', 'yaml']), help='Output format')
 def config():
-    """Show current configuration"""
+    """Show current configuration (Redis-only mode)"""
     
     config_data = {
-        'database': {
-            'host': 'localhost',
-            'port': 5432,
-            'database': 'kirolinter_devops',
-            'user': 'kirolinter'
-        },
         'redis': {
             'host': 'localhost',
             'port': 6379,
-            'db': 0
+            'db': 0,
+            'mode': 'demo'
         },
-        'celery': {
-            'broker_url': 'redis://localhost:6379/0',
-            'result_backend': 'redis://localhost:6379/0'
+        'devops': {
+            'mode': 'redis_only',
+            'features': [
+                'git_monitoring',
+                'dashboard', 
+                'health_checks',
+                'workflow_orchestration'
+            ]
         }
     }
     
@@ -256,58 +108,46 @@ def config():
 
 @devops.command()
 def init():
-    """Initialize DevOps infrastructure"""
+    """Initialize DevOps infrastructure (Redis-only mode)"""
     
     async def initialize():
-        click.echo("🚀 Initializing DevOps infrastructure...")
-        
-        # Initialize database
-        click.echo("1. Initializing database connection...")
-        db_manager = get_db_manager()
-        db_success = await db_manager.initialize()
-        
-        if not db_success:
-            click.echo("❌ Database initialization failed")
-            return False
-        
-        # Run migrations
-        click.echo("2. Running database migrations...")
-        migration_manager = await get_migration_manager()
-        migration_result = await migration_manager.migrate_to_latest()
-        
-        if not migration_result['success']:
-            click.echo("❌ Database migration failed")
-            await db_manager.close()
-            return False
+        click.echo("🚀 Initializing DevOps infrastructure (Redis-only mode)...")
         
         # Initialize Redis
-        click.echo("3. Initializing Redis connection...")
+        click.echo("1. Initializing Redis connection...")
         redis_manager = get_redis_manager()
-        redis_success = await redis_manager.initialize()
         
-        if not redis_success:
-            click.echo("❌ Redis initialization failed")
-            await db_manager.close()
+        if redis_manager is None:
+            click.echo("❌ Redis client not available")
             return False
         
-        # Test connectivity
-        click.echo("4. Testing connectivity...")
-        db_health = await db_manager.check_health()
-        redis_health = await redis_manager.check_health()
-        
-        if db_health['healthy'] and redis_health['healthy']:
-            click.echo("✅ DevOps infrastructure initialized successfully!")
-            click.echo(f"   Database: {db_health['pool_size']} connections")
-            click.echo(f"   Redis: {redis_health['redis_version']}")
-            click.echo(f"   Migrations: {migration_result['applied_count']} applied")
-        else:
-            click.echo("⚠️  Infrastructure initialized but some components have issues")
-        
-        # Cleanup
-        await db_manager.close()
-        await redis_manager.close()
-        
-        return True
+        try:
+            redis_success = await redis_manager.initialize()
+            
+            if not redis_success:
+                click.echo("❌ Redis initialization failed")
+                return False
+            
+            # Test connectivity
+            click.echo("2. Testing Redis connectivity...")
+            redis_health = await redis_manager.check_health()
+            
+            if redis_health.get('healthy', False):
+                click.echo("✅ DevOps infrastructure initialized successfully!")
+                click.echo(f"   Redis: Connected (version {redis_health.get('redis_version', 'unknown')})")
+                click.echo("   Mode: Demo (Redis-only)")
+                click.echo("   Features: git-monitor, dashboard, health-checks")
+            else:
+                click.echo("⚠️  Redis connection has issues")
+                click.echo(f"   Error: {redis_health.get('error', 'Unknown error')}")
+            
+            # Cleanup
+            await redis_manager.close()
+            return redis_health.get('healthy', False)
+            
+        except Exception as e:
+            click.echo(f"❌ Initialization failed: {str(e)}")
+            return False
     
     return asyncio.run(initialize())
 
@@ -325,28 +165,64 @@ def git_monitor():
 def start(repo: str, events: str, interval: int):
     """Start Git repository monitoring"""
     async def run_monitor():
-        from .integrations.git_events import GitEventDetector
-        from .analytics.dashboard import GitOpsMonitoringDashboard
+        try:
+            from .integrations.git_events import GitEventDetector
+        except ImportError:
+            click.echo("❌ Git event detector not available")
+            return
         
         click.echo(f"🔍 Starting Git monitoring for {repo}")
         click.echo(f"📊 Monitoring events: {events}")
         click.echo(f"⏱️  Check interval: {interval}s")
+        click.echo("Press Ctrl+C to stop monitoring...")
         
-        detector = GitEventDetector()
-        dashboard = GitOpsMonitoringDashboard()
+        # Get Redis manager for event storage
+        redis_manager = get_redis_manager()
+        redis_client = None
+        
+        if redis_manager:
+            try:
+                await redis_manager.initialize()
+                redis_client = redis_manager
+                click.echo("✅ Redis connected for event storage")
+            except Exception as e:
+                click.echo(f"⚠️  Redis unavailable, using memory-only mode: {e}")
+        
+        detector = GitEventDetector(redis_client=redis_client)
+        
+        # Add the repository to monitor
+        if not detector.add_repository(repo):
+            click.echo("❌ Failed to add repository for monitoring")
+            return
+        
+        click.echo("✅ Repository added to monitoring")
         
         try:
+            event_count = 0
             while True:
-                events_found = await detector.detect_events(repo)
-                if events_found:
-                    click.echo(f"📋 Found {len(events_found)} new events")
-                    for event in events_found:
-                        click.echo(f"   • {event.event_type.value}: {event.message or event.branch or 'N/A'}")
+                # Check for events manually since we're not using the automatic polling
+                repo_state = detector.monitored_repos.get(repo)
+                if repo_state:
+                    events_found = await detector._detect_events(repo, repo_state)
+                    if events_found:
+                        click.echo(f"📋 Found {len(events_found)} new events")
+                        for event in events_found:
+                            event_count += 1
+                            click.echo(f"   • {event.event_type.value}: {event.message or event.branch or 'N/A'}")
+                            # Emit event to handlers
+                            await detector._emit_event(event)
+                    elif event_count == 0:
+                        # First run, show status
+                        click.echo("📊 Monitoring active, waiting for Git events...")
+                        event_count = -1  # Mark as initialized
                 
                 await asyncio.sleep(interval)
                 
         except KeyboardInterrupt:
             click.echo("\n🛑 Stopping Git monitor...")
+        finally:
+            if redis_client:
+                await redis_client.close()
     
     asyncio.run(run_monitor())
 
@@ -357,7 +233,12 @@ def start(repo: str, events: str, interval: int):
 def dashboard(host: str, port: int):
     """Launch monitoring dashboard"""
     async def run_dashboard():
-        from .analytics.dashboard import GitOpsMonitoringDashboard
+        try:
+            from .analytics.dashboard import DashboardMetricsCollector, GitOpsDashboard
+            from .integrations.git_events import GitEventDetector
+        except ImportError as e:
+            click.echo(f"❌ Dashboard components not available: {e}")
+            return
         
         click.echo(f"🚀 Starting GitOps Dashboard on http://{host}:{port}")
         click.echo("📊 Dashboard features:")
@@ -365,15 +246,47 @@ def dashboard(host: str, port: int):
         click.echo("   • System health metrics")
         click.echo("   • Workflow monitoring")
         click.echo("   • API endpoints")
+        click.echo("Press Ctrl+C to stop dashboard...")
         
-        dashboard = GitOpsMonitoringDashboard()
+        # Initialize Redis connection
+        redis_manager = get_redis_manager()
+        redis_client = None
+        
+        if redis_manager:
+            try:
+                await redis_manager.initialize()
+                redis_client = redis_manager
+                click.echo("✅ Redis connected for dashboard data")
+            except Exception as e:
+                click.echo(f"⚠️  Redis unavailable, using demo mode: {e}")
+        
+        # Initialize components
+        git_detector = GitEventDetector(redis_client=redis_client)
+        metrics_collector = DashboardMetricsCollector(
+            redis_client=redis_client,
+            git_event_detector=git_detector
+        )
+        dashboard = GitOpsDashboard(metrics_collector, host=host, port=port)
         
         try:
-            await dashboard.start_server(host=host, port=port)
+            await dashboard.start()
+            click.echo(f"✅ Dashboard running at http://{host}:{port}")
+            
+            # Keep running until interrupted
+            while True:
+                await asyncio.sleep(1)
+                
         except KeyboardInterrupt:
             click.echo("\n🛑 Stopping dashboard...")
         except Exception as e:
             click.echo(f"❌ Dashboard error: {e}")
+        finally:
+            try:
+                await dashboard.stop()
+                if redis_client:
+                    await redis_client.close()
+            except:
+                pass
     
     asyncio.run(run_dashboard())
 

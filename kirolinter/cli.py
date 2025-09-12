@@ -381,18 +381,44 @@ def start(repo: str, events: str, interval: int):
                 click.echo(f"❌ Failed to add repository: {repo}")
                 return
             
-            click.echo("✅ Repository added to monitoring")
+            # Debug: Show what we're monitoring
+            repo_state = detector.monitored_repos.get(repo)
+            if repo_state:
+                click.echo("✅ Repository added to monitoring")
+                click.echo(f"   Current commit: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'}")
+                click.echo(f"   Tracked branches: {repo_state.tracked_branches}")
+            else:
+                click.echo("❌ Repository state not found")
             
-            # Check for events periodically
+            # Check for events periodically  
+            monitoring_started = False
             while True:
                 try:
-                    # Get recent events from the last check
-                    recent_events = await detector.get_recent_events(repo)
-                    if recent_events:
-                        click.echo(f"📋 Found {len(recent_events)} recent events")
-                        for event in recent_events:
-                            event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
-                            click.echo(f"   • {event.event_type.value}: {event_desc}")
+                    # Actually detect new events by checking repo state
+                    repo_state = detector.monitored_repos.get(repo)
+                    if repo_state:
+                        # Get current commit for debugging
+                        import git as gitpython
+                        current_repo = gitpython.Repo(repo)
+                        current_commit = current_repo.head.commit.hexsha if current_repo.head.is_valid() else None
+                        
+                        if not monitoring_started:
+                            click.echo(f"📊 Monitoring active, waiting for Git events...")
+                            click.echo(f"   Watching commit: {current_commit[:8] if current_commit else 'None'}")
+                            monitoring_started = True
+                        
+                        # Check if commit changed for debugging
+                        if current_commit and repo_state.last_commit_hash != current_commit:
+                            click.echo(f"🔄 Commit changed: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'} -> {current_commit[:8]}")
+                        
+                        new_events = await detector._detect_events(repo, repo_state)
+                        if new_events:
+                            click.echo(f"📋 Found {len(new_events)} new events")
+                            for event in new_events:
+                                event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
+                                click.echo(f"   • {event.event_type.value}: {event_desc}")
+                                # Emit event to handlers
+                                await detector._emit_event(event)
                     
                     await asyncio.sleep(interval)
                     

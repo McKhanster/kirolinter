@@ -365,8 +365,10 @@ def git_monitor():
 def start(repo: str, events: str, interval: int):
     """Start Git repository monitoring"""
     async def run_monitor():
+        click.echo("🔍 DEBUG: Starting run_monitor function")
         try:
             from kirolinter.devops.integrations.git_events import GitEventDetector
+            click.echo("🔍 DEBUG: GitEventDetector imported successfully")
             
             click.echo(f"🔍 Starting Git monitoring for {repo}")
             click.echo(f"📊 Monitoring events: {events}")
@@ -374,6 +376,7 @@ def start(repo: str, events: str, interval: int):
             click.echo("Press Ctrl+C to stop monitoring...")
             
             detector = GitEventDetector()
+            click.echo("🔍 DEBUG: GitEventDetector created")
             
             # Debug repository path resolution
             from pathlib import Path

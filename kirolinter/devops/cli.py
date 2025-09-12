@@ -195,15 +195,19 @@ def start(repo: str, events: str, interval: int):
             click.echo("❌ Failed to add repository for monitoring")
             return
         
+        # Get the actual key used by add_repository (resolved path)
+        from pathlib import Path
+        repo_key = str(Path(repo).resolve())
+        
         click.echo("✅ Repository added to monitoring")
         
         try:
             event_count = 0
             while True:
                 # Check for events manually since we're not using the automatic polling
-                repo_state = detector.monitored_repos.get(repo)
+                repo_state = detector.monitored_repos.get(repo_key)
                 if repo_state:
-                    events_found = await detector._detect_events(repo, repo_state)
+                    events_found = await detector._detect_events(repo_key, repo_state)
                     if events_found:
                         click.echo(f"📋 Found {len(events_found)} new events")
                         for event in events_found:

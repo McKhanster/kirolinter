@@ -14,3 +14,8 @@ Commands:
   init         Initialize DevOps infrastructure
 
 I would like to do some real-world testing. 
+
+
+kirolinter devops init
+
+python -c "from kirolinter.devops.cli import devops;print('DevOps CLI loaded successfully')"

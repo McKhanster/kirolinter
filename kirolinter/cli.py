@@ -383,16 +383,24 @@ def start(repo: str, events: str, interval: int):
             
             click.echo("✅ Repository added to monitoring")
             
-            # Check for events periodically
+            # Check for events periodically  
+            monitoring_started = False
             while True:
                 try:
-                    # Get recent events from the last check
-                    recent_events = await detector.get_recent_events(repo)
-                    if recent_events:
-                        click.echo(f"📋 Found {len(recent_events)} recent events")
-                        for event in recent_events:
-                            event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
-                            click.echo(f"   • {event.event_type.value}: {event_desc}")
+                    # Actually detect new events by checking repo state
+                    repo_state = detector.monitored_repos.get(repo)
+                    if repo_state:
+                        new_events = await detector._detect_events(repo, repo_state)
+                        if new_events:
+                            click.echo(f"📋 Found {len(new_events)} new events")
+                            for event in new_events:
+                                event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
+                                click.echo(f"   • {event.event_type.value}: {event_desc}")
+                                # Emit event to handlers
+                                await detector._emit_event(event)
+                        elif not monitoring_started:
+                            click.echo("📊 Monitoring active, waiting for Git events...")
+                            monitoring_started = True
                     
                     await asyncio.sleep(interval)
                     

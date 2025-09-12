@@ -84,22 +84,6 @@ class DashboardMetricsCollector:
                 
                 # Also check Redis for recent events to determine if monitoring is active
                 monitoring_active = status.get('running', False)
-                if not monitoring_active and self.redis_client and monitored_repos > 0:
-                    # If local detector isn't running but repos are configured,
-                    # check for recent events in Redis to see if another process is monitoring
-                    try:
-                        for repo_info in status.get('repositories', []):
-                            repo_path = repo_info.get('path', '')
-                            if repo_path:
-                                list_key = f"git_events:list:{repo_path}"
-                                # Check if there are any events in Redis
-                                if hasattr(self.redis_client, 'lrange'):
-                                    events = await self.redis_client.lrange(list_key, 0, 0)
-                                    if events:
-                                        monitoring_active = True  # Events exist, so something is monitoring
-                                        break
-                    except:
-                        pass  # Ignore errors in detection
                 
                 metrics.update({
                     'monitoring_active': monitoring_active,
@@ -107,15 +91,29 @@ class DashboardMetricsCollector:
                     'repositories': status.get('repositories', [])
                 })
                 
-                # Get recent events
+                # Get recent events - check all registered repositories
                 if self.redis_client:
-                    recent_events = await self.git_event_detector.get_recent_events(limit=50)
+                    all_recent_events = []
                     
-                    # If we have recent events (within last 5 minutes), monitoring is likely active
-                    if recent_events and not monitoring_active:
+                    # Check events for each repository
+                    for repo_info in status.get('repositories', []):
+                        repo_path = repo_info.get('path', '')
+                        if repo_path:
+                            events = await self.git_event_detector.get_recent_events(
+                                repository_path=repo_path, 
+                                limit=50
+                            )
+                            all_recent_events.extend(events)
+                    
+                    recent_events = sorted(all_recent_events, 
+                                         key=lambda e: e.timestamp, 
+                                         reverse=True)[:50]
+                    
+                    # If we have recent events (within last 10 minutes), monitoring is likely active
+                    if recent_events:
                         latest_event_time = recent_events[0].timestamp
                         time_since_last = (datetime.utcnow() - latest_event_time).total_seconds()
-                        if time_since_last < 300:  # 5 minutes
+                        if time_since_last < 600:  # 10 minutes
                             monitoring_active = True
                             metrics['monitoring_active'] = True
                     metrics['recent_events'] = [

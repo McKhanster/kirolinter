@@ -515,6 +515,14 @@ def dashboard(host: str, port: int):
         
         # Initialize components
         git_detector = GitEventDetector(redis_client=redis_client)
+        
+        # Add the current repository to the detector so it knows what to check
+        # This doesn't start monitoring, just registers the repo for status checks
+        import os
+        repo_path = os.getcwd()
+        if os.path.exists(os.path.join(repo_path, '.git')):
+            git_detector.add_repository(repo_path)
+        
         metrics_collector = DashboardMetricsCollector(
             redis_client=redis_client,
             git_event_detector=git_detector

@@ -162,18 +162,21 @@ kirolinter daemon start --interval=3600  # Every hour
 # If not, install them:
 # pip install -e ".[devops]"
 
-# Initialize DevOps infrastructure
+# Initialize Redis-only DevOps infrastructure 
 kirolinter devops init
 
-# Check system health
-kirolinter devops health --check-all
+# Check system health (Redis-only mode)
+kirolinter devops health
 
-# Start GitOps monitoring
-kirolinter devops git-monitor start --repo=. --events=all
+# Start GitOps monitoring for current repository
+kirolinter devops git-monitor start --repo=. --events=all --interval=5
 
-# Launch monitoring dashboard
-kirolinter devops dashboard --host=0.0.0.0 --port=8000
-# Visit: http://localhost:8000/dashboard
+# Launch monitoring dashboard (in another terminal)
+kirolinter devops dashboard --port=8090
+# Visit: http://localhost:8090
+
+# View current configuration
+kirolinter devops config --format=json
 
 # Set up GitHub integration (optional)
 export GITHUB_TOKEN="your-github-token"
@@ -238,11 +241,13 @@ kirolinter agent workflow --repo=. --template=full_review
 ### GitOps Monitoring Setup
 
 ```bash
-# Start real-time Git monitoring
-kirolinter devops git-monitor start --repo=. --events=all
+# Start real-time Git monitoring (current directory)
+kirolinter devops git-monitor start --repo=. --events=all --interval=5
 
-# Set up webhooks for GitHub/GitLab
-kirolinter devops webhook setup --platform=github --secret=your-secret
+# Monitor specific repository
+kirolinter devops git-monitor start --repo=/path/to/repo --events=commit,push --interval=10
+
+# Note: Webhook setup is available through the dashboard interface
 ```
 
 ### CI/CD Platform Integration
@@ -283,13 +288,16 @@ async with gitlab as connector:
 ### Dashboard & API
 
 ```bash
-# Start monitoring dashboard
-kirolinter devops dashboard --host=0.0.0.0 --port=8000
+# Start monitoring dashboard (Redis-only mode)
+kirolinter devops dashboard --port=8090
 
-# API endpoints available at:
-# - http://localhost:8000/api/health
-# - http://localhost:8000/api/metrics
-# - http://localhost:8000/api/workflows
+# Dashboard features:
+# - Real-time Git events
+# - System health metrics  
+# - Redis connection status
+# - Monitoring status overview
+
+# Visit: http://localhost:8090
 ```
 
 ---

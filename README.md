@@ -142,14 +142,20 @@ redis-server --daemonize yes
 ### GitOps Monitoring Setup
 
 ```bash
+# Initialize Redis-only DevOps infrastructure
+kirolinter devops init
+
 # Start real-time Git event monitoring
-kirolinter devops git-monitor start --repo=. --events=all
+kirolinter devops git-monitor start --repo=. --events=all --interval=5
 
-# Launch monitoring dashboard (http://localhost:8000/dashboard)
-kirolinter devops dashboard --host=0.0.0.0 --port=8000
+# Launch monitoring dashboard (http://localhost:8090)
+kirolinter devops dashboard --port=8090
 
-# Set up webhooks for GitHub/GitLab
-kirolinter devops webhook setup --platform=github --secret=your-webhook-secret
+# Check system health (Redis-only mode)  
+kirolinter devops health
+
+# View current configuration
+kirolinter devops config --format=json
 ```
 
 ### CI/CD Platform Integration
@@ -256,13 +262,13 @@ kirolinter devops workflow status --workflow-id=12345
 
 ### Dashboard & Monitoring
 
-The DevOps dashboard provides real-time monitoring at `http://localhost:8000/dashboard`:
+The DevOps dashboard provides real-time monitoring at `http://localhost:8090`:
 
-- **📊 System Health**: CPU, memory, disk usage, Redis connectivity
+- **📊 System Health**: CPU, memory, disk usage, Redis connectivity (Redis-only mode)  
 - **🔄 Git Events**: Real-time commit, push, branch, and tag monitoring
-- **🚀 Workflows**: Pipeline status, execution times, success rates
-- **📈 Analytics**: Performance metrics, trends, and insights
-- **🔔 Alerts**: Intelligent alerting for issues and anomalies
+- **🚀 Monitoring Status**: Active monitoring detection and repository status
+- **📈 Analytics**: Event metrics, performance trends, and insights
+- **🔔 Alerts**: Intelligent alerting for Redis connection and monitoring issues
 
 ### API Endpoints
 

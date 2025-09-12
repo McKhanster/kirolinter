@@ -1,0 +1,154 @@
+name: 'KiroLinter DevOps Quality Gate Demo'
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+# Required permissions for the action to work properly
+permissions:
+  contents: read
+  checks: write        # Required for creating check runs
+  pull-requests: write # Required for PR comments
+  security-events: write # Required for SARIF uploads
+  issues: read
+
+jobs:
+  pre-deploy-gate:
+    runs-on: ubuntu-latest
+    name: 'Pre-Deploy Quality Gate'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Redis
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        sudo systemctl start redis-server
+        redis-cli ping  # Verify Redis is working
+    
+    - name: Install KiroLinter
+      run: |
+        pip install -e ".[devops,ai]"
+        # Initialize DevOps infrastructure
+        kirolinter devops init
+    
+    - name: Run KiroLinter DevOps Quality Gate
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'pre-deploy'
+        risk-assessment: true
+        deployment-analysis: true
+        fail-on-issues: false  # Set to false for demo to avoid failures
+        severity-threshold: 'medium'
+        create-check-run: true
+        output-format: 'sarif'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        config-path: '.kirolinter.yml'
+        create-pr-comment: true
+        timeout: 300
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REDIS_URL: 'redis://localhost:6379'
+    
+    - name: Upload SARIF results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'kirolinter-results.sarif'
+        category: 'kirolinter-devops'
+
+  pre-commit-gate:
+    runs-on: ubuntu-latest
+    name: 'Pre-Commit Quality Gate'
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4  
+      with:
+        python-version: '3.11'
+    
+    - name: Install Redis
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        sudo systemctl start redis-server
+    
+    - name: Install KiroLinter
+      run: |
+        pip install -e ".[devops,ai]"
+        kirolinter devops init
+    
+    - name: Run Pre-Commit Quality Gate
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'pre-commit'
+        risk-assessment: false
+        deployment-analysis: false
+        fail-on-issues: true
+        severity-threshold: 'high'
+        create-check-run: true
+        output-format: 'json'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        create-pr-comment: false
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REDIS_URL: 'redis://localhost:6379'
+
+  post-deploy-gate:
+    runs-on: ubuntu-latest
+    name: 'Post-Deploy Quality Gate'
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Redis
+      run: |
+        sudo apt-get update  
+        sudo apt-get install -y redis-server
+        sudo systemctl start redis-server
+    
+    - name: Install KiroLinter
+      run: |
+        pip install -e ".[devops,ai]"
+        kirolinter devops init
+        
+        # Start DevOps monitoring for post-deploy validation
+        kirolinter devops git-monitor start --repo=. --events=all --interval=10 &
+        sleep 5  # Give monitor time to start
+    
+    - name: Run Post-Deploy Validation
+      uses: ./.github/actions/kirolinter-devops
+      with:
+        gate-type: 'post-deploy'
+        risk-assessment: true
+        deployment-analysis: true
+        fail-on-issues: false  # Post-deploy shouldn't block
+        severity-threshold: 'low'
+        create-check-run: true
+        output-format: 'markdown'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        create-pr-comment: false
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REDIS_URL: 'redis://localhost:6379'

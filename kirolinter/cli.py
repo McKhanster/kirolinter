@@ -533,6 +533,12 @@ def agent_workflow(repo: str, mode: str, auto_apply: bool, create_pr: bool,
         if result.get("success", False):
             click.echo("🎉 AI Agent Workflow completed successfully!")
             
+            # Debug: Show result structure
+            if verbose:
+                click.echo(f"\n🔍 Debug - Result keys: {list(result.keys())}")
+                if "results" in result:
+                    click.echo(f"🔍 Debug - Results keys: {list(result['results'].keys())}")
+            
             # Display analysis results and AI insights
             if "results" in result:
                 results = result["results"]

@@ -375,15 +375,21 @@ def start(repo: str, events: str, interval: int):
             
             detector = GitEventDetector()
             
+            # Debug repository path resolution
+            from pathlib import Path
+            repo_key = str(Path(repo).resolve())
+            click.echo(f"🔍 Resolved repo path: {repo_key}")
+            
             # Add the repository to monitor
             success = detector.add_repository(repo)
+            click.echo(f"🔍 Add repository returned: {success}")
+            
             if not success:
                 click.echo(f"❌ Failed to add repository: {repo}")
                 return
             
-            # Get the actual key used by add_repository (resolved path)
-            from pathlib import Path
-            repo_key = str(Path(repo).resolve())
+            # Debug: Show what's in monitored_repos
+            click.echo(f"🔍 Monitored repos keys: {list(detector.monitored_repos.keys())}")
             
             # Debug: Show what we're monitoring
             repo_state = detector.monitored_repos.get(repo_key)
@@ -392,7 +398,15 @@ def start(repo: str, events: str, interval: int):
                 click.echo(f"   Current commit: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'}")
                 click.echo(f"   Tracked branches: {repo_state.tracked_branches}")
             else:
-                click.echo("❌ Repository state not found")
+                # Try all keys to see if it's stored under a different path
+                for key, state in detector.monitored_repos.items():
+                    click.echo(f"🔍 Found repo under key: {key}")
+                    repo_key = key  # Use the actual key
+                    repo_state = state
+                    break
+                
+                if not repo_state:
+                    click.echo("❌ Repository state not found")
             
             # Check for events periodically  
             monitoring_started = False

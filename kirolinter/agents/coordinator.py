@@ -370,14 +370,28 @@ class CoordinatorAgent:
                 return workflow_result
             
             # Phase 2: Fix and integrate (if issues found)
-            if review_result["results"]["analysis"].get("total_issues_found", 0) > 0:
+            issues_found = review_result["results"]["analysis"].get("total_issues_found", 0)
+            auto_apply = kwargs.get("auto_apply", False)
+            
+            if self.verbose:
+                print(f"🔧 Issues found: {issues_found}, auto_apply: {auto_apply}")
+            
+            if issues_found > 0 and auto_apply:
+                if self.verbose:
+                    print("🔧 Starting fix and integrate phase...")
                 fix_result = self._fix_and_integrate_workflow(
                     repo_path,
-                    auto_apply=kwargs.get("auto_apply", True),
-                    create_pr=kwargs.get("create_pr", True),
+                    auto_apply=auto_apply,
+                    create_pr=kwargs.get("create_pr", False),
                     pr_title="🤖 Autonomous code quality improvements"
                 )
                 workflow_result["results"]["fixes"] = fix_result
+            elif issues_found > 0:
+                if self.verbose:
+                    print("🔍 Issues found but auto_apply=False - skipping fixes")
+            else:
+                if self.verbose:
+                    print("✅ No issues found - skipping fix phase")
             
             # Phase 3: Learn and adapt
             if kwargs.get("continuous_learning", True):

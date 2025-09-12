@@ -1,0 +1,1 @@
+kirolinter agent workflow --repo=. --max-fixes=1

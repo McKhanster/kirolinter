@@ -521,7 +521,10 @@ def dashboard(host: str, port: int):
         import os
         repo_path = os.getcwd()
         if os.path.exists(os.path.join(repo_path, '.git')):
-            git_detector.add_repository(repo_path)
+            if git_detector.add_repository(repo_path):
+                click.echo(f"✅ Added repository {repo_path} to detector")
+            else:
+                click.echo(f"⚠️  Failed to add repository {repo_path} to detector")
         
         metrics_collector = DashboardMetricsCollector(
             redis_client=redis_client,

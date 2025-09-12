@@ -85,6 +85,10 @@ class DashboardMetricsCollector:
                 # Also check Redis for recent events to determine if monitoring is active
                 monitoring_active = status.get('running', False)
                 
+                # Debug logging
+                self.logger.info(f"Git detector status: monitored_repos={monitored_repos}, running={monitoring_active}")
+                self.logger.info(f"Repositories: {status.get('repositories', [])}")
+                
                 metrics.update({
                     'monitoring_active': monitoring_active,
                     'monitored_repositories': monitored_repos,
@@ -110,12 +114,15 @@ class DashboardMetricsCollector:
                                          reverse=True)[:50]
                     
                     # If we have recent events (within last 10 minutes), monitoring is likely active
+                    self.logger.info(f"Found {len(recent_events)} recent events")
                     if recent_events:
                         latest_event_time = recent_events[0].timestamp
                         time_since_last = (datetime.utcnow() - latest_event_time).total_seconds()
+                        self.logger.info(f"Latest event was {time_since_last:.1f} seconds ago")
                         if time_since_last < 600:  # 10 minutes
                             monitoring_active = True
                             metrics['monitoring_active'] = True
+                            self.logger.info("Setting monitoring_active=True based on recent events")
                     metrics['recent_events'] = [
                         {
                             'event_type': event.event_type.value,

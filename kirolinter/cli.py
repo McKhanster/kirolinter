@@ -543,25 +543,34 @@ def agent_workflow(repo: str, mode: str, auto_apply: bool, create_pr: bool,
             if "results" in result:
                 results = result["results"]
                 
-                # Show basic analysis stats
-                if "analysis" in results:
-                    analysis = results["analysis"]
-                    click.echo(f"📊 Analysis: {analysis.get('total_issues_found', 0)} issues in {analysis.get('total_files_analyzed', 0)} files")
-                
-                # Display AI-powered review report
-                if "report" in results:
-                    report = results["report"]
-                    if "ai_summary" in report:
+                # Display review results (this contains the AI analysis)
+                if "review" in results:
+                    review = results["review"]
+                    if verbose:
+                        click.echo(f"🔍 Debug - Review keys: {list(review.keys())}")
+                    
+                    # Check for results within review
+                    if "results" in review:
+                        review_results = review["results"]
+                        
+                        # Show basic stats
+                        if "analysis" in review_results:
+                            analysis = review_results["analysis"]
+                            click.echo(f"📊 Analysis: {analysis.get('total_issues_found', 0)} issues in {analysis.get('total_files_analyzed', 0)} files")
+                        
+                        # Display AI report
+                        if "report" in review_results and "ai_summary" in review_results["report"]:
+                            click.echo("\n🤖 AI-Powered Code Review:")
+                            click.echo("=" * 70)
+                            click.echo(review_results["report"]["ai_summary"])
+                            click.echo("=" * 70)
+                    
+                    # Also check if AI summary is directly in review
+                    elif "ai_summary" in review:
                         click.echo("\n🤖 AI-Powered Code Review:")
                         click.echo("=" * 70)
-                        click.echo(report["ai_summary"])
+                        click.echo(review["ai_summary"])
                         click.echo("=" * 70)
-                
-                # Display prioritization insights if available
-                if "prioritization" in results:
-                    prioritization = results["prioritization"]
-                    if "total_issues" in prioritization:
-                        click.echo(f"\n🎯 Prioritization: {prioritization['total_issues']} issues analyzed")
             
             if "fixes" in result["results"]:
                 fixes = result["results"]["fixes"]["results"]

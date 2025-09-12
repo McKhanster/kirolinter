@@ -18,4 +18,12 @@ I would like to do some real-world testing.
 
 kirolinter devops init
 
-python -c "from kirolinter.devops.cli import devops;print('DevOps CLI loaded successfully')"
+kirolinter devops git-monitor start --repo=. --events=all --interval=5 || echo "Git monitor test completed" 
+
+kirolinter devops git-monitor start --repo=. --events=all --interval=5
+
+
+kirolinter devops dashboard --port=8080 
+
+
+echo "DevOps test $(date)" >> TESTME.md && git add TESTME.md && git commit -m "DevOps monitoring test"

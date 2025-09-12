@@ -78,15 +78,46 @@ class DashboardMetricsCollector:
             if self.git_event_detector:
                 # Get status from git event detector
                 status = self.git_event_detector.get_monitoring_status()
+                
+                # Check if any repositories are being monitored (even if by another process)
+                monitored_repos = status.get('monitored_repositories', 0)
+                
+                # Also check Redis for recent events to determine if monitoring is active
+                monitoring_active = status.get('running', False)
+                if not monitoring_active and self.redis_client and monitored_repos > 0:
+                    # If local detector isn't running but repos are configured,
+                    # check for recent events in Redis to see if another process is monitoring
+                    try:
+                        for repo_info in status.get('repositories', []):
+                            repo_path = repo_info.get('path', '')
+                            if repo_path:
+                                list_key = f"git_events:list:{repo_path}"
+                                # Check if there are any events in Redis
+                                if hasattr(self.redis_client, 'lrange'):
+                                    events = await self.redis_client.lrange(list_key, 0, 0)
+                                    if events:
+                                        monitoring_active = True  # Events exist, so something is monitoring
+                                        break
+                    except:
+                        pass  # Ignore errors in detection
+                
                 metrics.update({
-                    'monitoring_active': status.get('running', False),
-                    'monitored_repositories': status.get('monitored_repositories', 0),
+                    'monitoring_active': monitoring_active,
+                    'monitored_repositories': monitored_repos,
                     'repositories': status.get('repositories', [])
                 })
                 
                 # Get recent events
                 if self.redis_client:
                     recent_events = await self.git_event_detector.get_recent_events(limit=50)
+                    
+                    # If we have recent events (within last 5 minutes), monitoring is likely active
+                    if recent_events and not monitoring_active:
+                        latest_event_time = recent_events[0].timestamp
+                        time_since_last = (datetime.utcnow() - latest_event_time).total_seconds()
+                        if time_since_last < 300:  # 5 minutes
+                            monitoring_active = True
+                            metrics['monitoring_active'] = True
                     metrics['recent_events'] = [
                         {
                             'event_type': event.event_type.value,
@@ -244,16 +275,29 @@ class DashboardMetricsCollector:
             # Check Redis connection
             if self.redis_client:
                 try:
-                    await self.redis_client.ping()
-                    metrics['redis_status']['connected'] = True
-                    
-                    # Get Redis info
-                    info = await self.redis_client.info()
-                    metrics['redis_status'].update({
-                        'used_memory_mb': info.get('used_memory', 0) / (1024**2),
-                        'connected_clients': info.get('connected_clients', 0),
-                        'total_commands_processed': info.get('total_commands_processed', 0)
-                    })
+                    # Check if redis_client is a RedisManager instance
+                    if hasattr(self.redis_client, 'check_health'):
+                        # Use RedisManager's check_health method
+                        health = await self.redis_client.check_health()
+                        metrics['redis_status']['connected'] = health.get('healthy', False)
+                        if health.get('healthy'):
+                            metrics['redis_status'].update({
+                                'ping_time_seconds': health.get('ping_time_seconds', 0),
+                                'connected_clients': health.get('connected_clients', 0),
+                                'used_memory_human': health.get('used_memory_human', 'unknown')
+                            })
+                    else:
+                        # Fallback for raw Redis client
+                        await self.redis_client.ping()
+                        metrics['redis_status']['connected'] = True
+                        
+                        # Get Redis info
+                        info = await self.redis_client.info()
+                        metrics['redis_status'].update({
+                            'used_memory_mb': info.get('used_memory', 0) / (1024**2),
+                            'connected_clients': info.get('connected_clients', 0),
+                            'total_commands_processed': info.get('total_commands_processed', 0)
+                        })
                 except Exception as e:
                     metrics['redis_status']['error'] = str(e)
             

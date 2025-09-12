@@ -316,13 +316,16 @@ class GitEventDetector:
                 'event_id': event.event_id
             }
             
-            # Store in Redis with expiration
+            # Store in Redis with expiration using RedisManager.set method
             key = f"git_events:{event.event_id}"
-            await self.redis_client.setex(key, 86400 * 30, json.dumps(event_data))  # 30 days
+            await self.redis_client.set(key, event_data, ex=86400 * 30)  # 30 days
             
-            # Add to event stream
-            stream_key = f"git_events:stream:{event.repository_path}"
-            await self.redis_client.xadd(stream_key, event_data, maxlen=1000)
+            # Store in a list as an alternative to streams since RedisManager doesn't have xadd
+            list_key = f"git_events:list:{event.repository_path}"
+            await self.redis_client.lpush(list_key, event_data)
+            
+            # Trim list to keep only recent events (max 1000)
+            await self.redis_client.ltrim(list_key, 0, 999)
             
         except Exception as e:
             self.logger.error(f"Error storing event in Redis: {e}")
@@ -338,10 +341,11 @@ class GitEventDetector:
                 return events
             
             if repository_path:
-                stream_key = f"git_events:stream:{repository_path}"
-                stream_events = await self.redis_client.xrange(stream_key, count=limit)
+                list_key = f"git_events:list:{repository_path}"
+                event_data_list = await self.redis_client.lrange(list_key, 0, limit - 1)
                 
-                for event_id, event_data in stream_events:
+                for event_data in event_data_list:
+                    # event_data is already deserialized by RedisManager
                     if event_type and event_data.get('event_type') != event_type.value:
                         continue
                     
@@ -349,12 +353,12 @@ class GitEventDetector:
                         event_type=GitEventType(event_data['event_type']),
                         repository_path=event_data['repository_path'],
                         timestamp=datetime.fromisoformat(event_data['timestamp']),
-                        event_data=json.loads(event_data.get('event_data', '{}')),
+                        event_data=event_data.get('event_data', {}),
                         branch=event_data.get('branch'),
                         commit_hash=event_data.get('commit_hash'),
                         author=event_data.get('author'),
                         message=event_data.get('message'),
-                        files_changed=json.loads(event_data.get('files_changed', '[]')),
+                        files_changed=event_data.get('files_changed', []),
                         event_id=event_data.get('event_id')
                     )
                     events.append(event)

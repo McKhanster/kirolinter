@@ -490,13 +490,19 @@ def start(repo: str, events: str, interval: int):
 @click.option('--deployment-analysis', is_flag=True, default=False,
               help='Enable deployment impact analysis')
 @click.option('--output-file', help='Output file path')
+@click.option('--quiet', is_flag=True, default=False,
+              help='Suppress status messages (for CI/CD)')
 def gate(gate_type: str, output_format: str, severity_threshold: str, 
-         risk_assessment: bool, deployment_analysis: bool, output_file: str):
+         risk_assessment: bool, deployment_analysis: bool, output_file: str, quiet: bool):
     """Run DevOps quality gate analysis"""
     import json
+    import sys
     from datetime import datetime
     
-    click.echo(f"🚪 Running {gate_type} quality gate...")
+    # Only show status messages if not outputting JSON to stdout
+    # This ensures JSON output is always clean for parsing
+    if not quiet and (output_file or output_format != 'json'):
+        click.echo(f"Running {gate_type} quality gate...", err=True)
     
     # Mock quality gate results for demo purposes
     # In a real implementation, this would run actual analysis
@@ -607,7 +613,7 @@ def gate(gate_type: str, output_format: str, severity_threshold: str,
 - **Gate Type**: {gate_type}
 - **Quality Score**: {results['quality_score']}/100
 - **Issues Found**: {results['issues_found']}
-- **Status**: {'✅ PASSED' if results['passed'] else '❌ FAILED'}
+- **Status**: {'PASSED' if results['passed'] else 'FAILED'}
 
 ## Issue Breakdown
 - Critical: {results['critical_issues']}
@@ -623,9 +629,13 @@ def gate(gate_type: str, output_format: str, severity_threshold: str,
     if output_file:
         with open(output_file, 'w') as f:
             f.write(output)
-        click.echo(f"📄 Results written to {output_file}")
+        if not quiet:
+            click.echo(f"Results written to {output_file}", err=True)
     else:
-        click.echo(output)
+        # Output the actual results to stdout (for parsing)
+        # Use sys.stdout.write to avoid click adding extra formatting
+        sys.stdout.write(output)
+        sys.stdout.flush()
 
 
 @devops.command()

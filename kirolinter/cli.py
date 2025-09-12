@@ -399,14 +399,30 @@ def start(repo: str, events: str, interval: int):
             
             detector = GitEventDetector()
             
+            # Add the repository to monitor
+            success = detector.add_repository(repo)
+            if not success:
+                click.echo(f"❌ Failed to add repository: {repo}")
+                return
+            
+            click.echo("✅ Repository added to monitoring")
+            
+            # Check for events periodically
             while True:
-                events_found = await detector.detect_events(repo)
-                if events_found:
-                    click.echo(f"📋 Found {len(events_found)} new events")
-                    for event in events_found:
-                        click.echo(f"   • {event.event_type.value}: {event.message or event.branch or 'N/A'}")
-                
-                await asyncio.sleep(interval)
+                try:
+                    # Get recent events from the last check
+                    recent_events = await detector.get_recent_events(repo)
+                    if recent_events:
+                        click.echo(f"📋 Found {len(recent_events)} recent events")
+                        for event in recent_events:
+                            event_desc = event.message or event.branch or f"{event.commit_hash[:8] if event.commit_hash else 'N/A'}"
+                            click.echo(f"   • {event.event_type.value}: {event_desc}")
+                    
+                    await asyncio.sleep(interval)
+                    
+                except Exception as check_error:
+                    click.echo(f"⚠️  Check error: {check_error}")
+                    await asyncio.sleep(interval)
                 
         except KeyboardInterrupt:
             click.echo("\n🛑 Stopping Git monitor...")

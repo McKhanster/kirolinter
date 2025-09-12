@@ -381,8 +381,12 @@ def start(repo: str, events: str, interval: int):
                 click.echo(f"❌ Failed to add repository: {repo}")
                 return
             
+            # Get the actual key used by add_repository (resolved path)
+            from pathlib import Path
+            repo_key = str(Path(repo).resolve())
+            
             # Debug: Show what we're monitoring
-            repo_state = detector.monitored_repos.get(repo)
+            repo_state = detector.monitored_repos.get(repo_key)
             if repo_state:
                 click.echo("✅ Repository added to monitoring")
                 click.echo(f"   Current commit: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'}")
@@ -395,7 +399,7 @@ def start(repo: str, events: str, interval: int):
             while True:
                 try:
                     # Actually detect new events by checking repo state
-                    repo_state = detector.monitored_repos.get(repo)
+                    repo_state = detector.monitored_repos.get(repo_key)
                     if repo_state:
                         # Get current commit for debugging
                         import git as gitpython
@@ -411,7 +415,7 @@ def start(repo: str, events: str, interval: int):
                         if current_commit and repo_state.last_commit_hash != current_commit:
                             click.echo(f"🔄 Commit changed: {repo_state.last_commit_hash[:8] if repo_state.last_commit_hash else 'None'} -> {current_commit[:8]}")
                         
-                        new_events = await detector._detect_events(repo, repo_state)
+                        new_events = await detector._detect_events(repo_key, repo_state)
                         if new_events:
                             click.echo(f"📋 Found {len(new_events)} new events")
                             for event in new_events:

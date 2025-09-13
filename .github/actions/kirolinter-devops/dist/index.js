@@ -41376,445 +41376,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 9407:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-const core = __importStar(__nccwpck_require__(7484));
-const github = __importStar(__nccwpck_require__(3228));
-const exec = __importStar(__nccwpck_require__(5236));
-const fs = __importStar(__nccwpck_require__(2136));
-const path = __importStar(__nccwpck_require__(6928));
-const axios_1 = __importDefault(__nccwpck_require__(7269));
-const yaml = __importStar(__nccwpck_require__(4281));
-class KiroLinterDevOpsAction {
-    config;
-    octokit;
-    context;
-    constructor() {
-        this.config = this.parseInputs();
-        this.octokit = github.getOctokit(core.getInput('github-token'));
-        this.context = github.context;
-    }
-    parseInputs() {
-        return {
-            gateType: core.getInput('gate-type') || 'pre-merge',
-            riskAssessment: core.getBooleanInput('risk-assessment'),
-            deploymentAnalysis: core.getBooleanInput('deployment-analysis'),
-            failOnIssues: core.getBooleanInput('fail-on-issues'),
-            severityThreshold: core.getInput('severity-threshold') || 'medium',
-            timeout: parseInt(core.getInput('timeout')) || 300,
-            outputFormat: core.getInput('output-format') || 'markdown',
-            createPrComment: core.getBooleanInput('create-pr-comment'),
-            createCheckRun: core.getBooleanInput('create-check-run'),
-            configPath: core.getInput('config-path') || '.kirolinter.yml',
-            endpoint: core.getInput('kirolinter-endpoint') || 'https://api.kirolinter.dev',
-            token: core.getInput('kirolinter-token')
-        };
-    }
-    async run() {
-        try {
-            core.info(`🚀 Starting KiroLinter DevOps Quality Gate - ${this.config.gateType}`);
-            // Create check run if requested
-            let checkRun = null;
-            if (this.config.createCheckRun) {
-                checkRun = await this.createCheckRun();
-                core.info(`✅ Created check run: ${checkRun.data.html_url}`);
-            }
-            // Load configuration
-            const config = await this.loadConfiguration();
-            // Run quality analysis
-            const result = await this.runQualityAnalysis(config);
-            // Update check run with results
-            if (checkRun) {
-                await this.updateCheckRun(checkRun.data.id, result);
-                core.setOutput('check-run-id', checkRun.data.id);
-            }
-            // Create PR comment if requested
-            if (this.config.createPrComment && this.context.payload.pull_request) {
-                await this.createPrComment(result);
-                core.info('✅ Created PR comment with quality report');
-            }
-            // Set outputs
-            this.setOutputs(result);
-            // Generate SARIF report
-            if (this.config.outputFormat === 'sarif') {
-                const sarifPath = await this.generateSarifReport(result);
-                core.setOutput('sarif-file', sarifPath);
-            }
-            // Determine success/failure
-            if (this.config.failOnIssues && !result.passed) {
-                core.setFailed(`Quality gate failed: ${result.criticalIssues} critical, ${result.highIssues} high severity issues found`);
-            }
-            else {
-                core.info(`✅ Quality gate passed! Score: ${result.qualityScore}/100`);
-            }
-        }
-        catch (error) {
-            core.setFailed(`Action failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
-    async loadConfiguration() {
-        try {
-            if (await fs.pathExists(this.config.configPath)) {
-                const configContent = await fs.readFile(this.config.configPath, 'utf8');
-                return yaml.load(configContent);
-            }
-            else {
-                core.info(`ℹ️ No configuration file found at ${this.config.configPath}, using defaults`);
-                return {};
-            }
-        }
-        catch (error) {
-            core.warning(`Failed to load configuration: ${error}`);
-            return {};
-        }
-    }
-    async runQualityAnalysis(config) {
-        core.info('🔍 Running quality analysis...');
-        try {
-            // Check if KiroLinter is available locally
-            const isLocal = await this.checkLocalKiroLinter();
-            if (isLocal) {
-                return await this.runLocalAnalysis(config);
-            }
-            else if (this.config.token) {
-                return await this.runCloudAnalysis(config);
-            }
-            else {
-                // Install and run KiroLinter
-                return await this.installAndRunKiroLinter(config);
-            }
-        }
-        catch (error) {
-            core.error(`Analysis failed: ${error}`);
-            throw error;
-        }
-    }
-    async checkLocalKiroLinter() {
-        try {
-            let exitCode = 0;
-            await exec.exec('kirolinter', ['--version'], {
-                listeners: {
-                    stdout: (data) => {
-                        core.info(`KiroLinter version: ${data.toString()}`);
-                    }
-                },
-                ignoreReturnCode: true
-            }).then((code) => {
-                exitCode = code;
-            });
-            return exitCode === 0;
-        }
-        catch {
-            return false;
-        }
-    }
-    async installAndRunKiroLinter(config) {
-        core.info('📦 Installing KiroLinter...');
-        // Install KiroLinter via pip
-        await exec.exec('pip', ['install', 'kirolinter-devops']);
-        return await this.runLocalAnalysis(config);
-    }
-    async runLocalAnalysis(config) {
-        core.info('🔍 Running local KiroLinter analysis...');
-        const args = [
-            'devops',
-            'gate',
-            '--type', this.config.gateType,
-            '--format', 'json',
-            '--severity-threshold', this.config.severityThreshold
-        ];
-        if (this.config.riskAssessment) {
-            args.push('--risk-assessment');
-        }
-        if (this.config.deploymentAnalysis) {
-            args.push('--deployment-analysis');
-        }
-        if (this.config.configPath && await fs.pathExists(this.config.configPath)) {
-            args.push('--config', this.config.configPath);
-        }
-        let output = '';
-        await exec.exec('kirolinter', args, {
-            listeners: {
-                stdout: (data) => {
-                    output += data.toString();
-                },
-                stderr: (data) => {
-                    core.warning(data.toString());
-                }
-            },
-            ignoreReturnCode: true
-        });
-        try {
-            const result = JSON.parse(output);
-            return this.normalizeResult(result);
-        }
-        catch (error) {
-            throw new Error(`Failed to parse KiroLinter output: ${error}`);
-        }
-    }
-    async runCloudAnalysis(config) {
-        core.info('☁️ Running cloud KiroLinter analysis...');
-        const payload = {
-            gateType: this.config.gateType,
-            repository: this.context.repo,
-            ref: this.context.sha,
-            pullRequest: this.context.payload.pull_request?.number,
-            config: config,
-            options: {
-                riskAssessment: this.config.riskAssessment,
-                deploymentAnalysis: this.config.deploymentAnalysis,
-                severityThreshold: this.config.severityThreshold
-            }
-        };
-        const response = await axios_1.default.post(`${this.config.endpoint}/v1/quality-gate`, payload, {
-            headers: {
-                'Authorization': `Bearer ${this.config.token}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'KiroLinter-GitHub-Action/1.0.0'
-            },
-            timeout: this.config.timeout * 1000
-        });
-        return this.normalizeResult(response.data);
-    }
-    normalizeResult(rawResult) {
-        return {
-            qualityScore: rawResult.quality_score || rawResult.qualityScore || 0,
-            issuesFound: rawResult.issues_found || rawResult.issuesFound || 0,
-            criticalIssues: rawResult.critical_issues || rawResult.criticalIssues || 0,
-            highIssues: rawResult.high_issues || rawResult.highIssues || 0,
-            mediumIssues: rawResult.medium_issues || rawResult.mediumIssues || 0,
-            lowIssues: rawResult.low_issues || rawResult.lowIssues || 0,
-            riskScore: rawResult.risk_score || rawResult.riskScore || 0,
-            passed: rawResult.passed || (rawResult.quality_score || rawResult.qualityScore || 0) >= 70,
-            reportUrl: rawResult.report_url || rawResult.reportUrl,
-            issues: rawResult.issues || [],
-            recommendations: rawResult.recommendations || []
-        };
-    }
-    async createCheckRun() {
-        return await this.octokit.rest.checks.create({
-            owner: this.context.repo.owner,
-            repo: this.context.repo.repo,
-            name: `KiroLinter DevOps - ${this.config.gateType.replace('_', ' ')}`,
-            head_sha: this.context.sha,
-            status: 'in_progress',
-            started_at: new Date().toISOString(),
-            details_url: 'https://kirolinter.dev'
-        });
-    }
-    async updateCheckRun(checkRunId, result) {
-        const conclusion = result.passed ? 'success' : 'failure';
-        const title = result.passed ? '✅ Quality Gate Passed' : '❌ Quality Gate Failed';
-        const summary = this.generateCheckRunSummary(result);
-        await this.octokit.rest.checks.update({
-            owner: this.context.repo.owner,
-            repo: this.context.repo.repo,
-            check_run_id: checkRunId,
-            status: 'completed',
-            conclusion: conclusion,
-            completed_at: new Date().toISOString(),
-            output: {
-                title: title,
-                summary: summary,
-                text: this.generateDetailedReport(result)
-            }
-        });
-    }
-    generateCheckRunSummary(result) {
-        return `
-**Quality Score**: ${result.qualityScore}/100
-**Risk Score**: ${result.riskScore}/100
-
-**Issues Found**: ${result.issuesFound}
-- Critical: ${result.criticalIssues}
-- High: ${result.highIssues}  
-- Medium: ${result.mediumIssues}
-- Low: ${result.lowIssues}
-
-**Gate Type**: ${this.config.gateType.replace('_', ' ')}
-**Result**: ${result.passed ? 'PASSED' : 'FAILED'}
-    `.trim();
-    }
-    generateDetailedReport(result) {
-        let report = `## 📊 Detailed Quality Report\n\n`;
-        if (result.issues.length > 0) {
-            report += `### Issues Found\n\n`;
-            const groupedIssues = result.issues.reduce((acc, issue) => {
-                if (!acc[issue.severity])
-                    acc[issue.severity] = [];
-                acc[issue.severity].push(issue);
-                return acc;
-            }, {});
-            for (const [severity, issues] of Object.entries(groupedIssues)) {
-                if (issues.length === 0)
-                    continue;
-                report += `#### ${severity.toUpperCase()} Issues (${issues.length})\n\n`;
-                for (const issue of issues.slice(0, 10)) { // Limit to first 10 per severity
-                    report += `- **${issue.rule}**: ${issue.message}\n`;
-                    report += `  - File: \`${issue.file}:${issue.line}\`\n\n`;
-                }
-                if (issues.length > 10) {
-                    report += `... and ${issues.length - 10} more ${severity} issues\n\n`;
-                }
-            }
-        }
-        if (result.recommendations.length > 0) {
-            report += `### 🎯 Recommendations\n\n`;
-            result.recommendations.slice(0, 5).forEach((rec, index) => {
-                report += `${index + 1}. ${rec}\n`;
-            });
-        }
-        return report;
-    }
-    async createPrComment(result) {
-        const body = this.generatePrComment(result);
-        await this.octokit.rest.issues.createComment({
-            owner: this.context.repo.owner,
-            repo: this.context.repo.repo,
-            issue_number: this.context.payload.pull_request.number,
-            body: body
-        });
-    }
-    generatePrComment(result) {
-        const statusEmoji = result.passed ? '✅' : '❌';
-        const scoreColor = result.qualityScore >= 80 ? '🟢' : result.qualityScore >= 60 ? '🟡' : '🔴';
-        return `
-## ${statusEmoji} KiroLinter DevOps Quality Report
-
-**Quality Score**: ${scoreColor} ${result.qualityScore}/100  
-**Risk Score**: ${result.riskScore}/100  
-**Gate**: ${this.config.gateType.replace('_', ' ')}  
-
-### 📈 Issue Summary
-- **Critical**: ${result.criticalIssues}
-- **High**: ${result.highIssues}  
-- **Medium**: ${result.mediumIssues}
-- **Low**: ${result.lowIssues}
-
-${result.passed ?
-            '🎉 **Quality gate passed!** Your code meets the required quality standards.' :
-            '⚠️ **Quality gate failed.** Please address the issues above before merging.'}
-
----
-*Generated by [KiroLinter DevOps](https://kirolinter.dev) • [View detailed report](${result.reportUrl || '#'})*
-    `.trim();
-    }
-    async generateSarifReport(result) {
-        const sarifReport = {
-            version: '2.1.0',
-            $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
-            runs: [{
-                    tool: {
-                        driver: {
-                            name: 'KiroLinter DevOps',
-                            version: '1.0.0',
-                            informationUri: 'https://kirolinter.dev',
-                            rules: []
-                        }
-                    },
-                    results: result.issues.map(issue => ({
-                        ruleId: issue.rule,
-                        level: this.mapSeverityToSarifLevel(issue.severity),
-                        message: {
-                            text: issue.message
-                        },
-                        locations: [{
-                                physicalLocation: {
-                                    artifactLocation: {
-                                        uri: issue.file
-                                    },
-                                    region: {
-                                        startLine: issue.line
-                                    }
-                                }
-                            }]
-                    }))
-                }]
-        };
-        const sarifPath = path.join(process.cwd(), 'kirolinter-results.sarif');
-        await fs.writeJSON(sarifPath, sarifReport, { spaces: 2 });
-        return sarifPath;
-    }
-    mapSeverityToSarifLevel(severity) {
-        switch (severity.toLowerCase()) {
-            case 'critical':
-                return 'error';
-            case 'high':
-                return 'error';
-            case 'medium':
-                return 'warning';
-            case 'low':
-                return 'note';
-            default:
-                return 'warning';
-        }
-    }
-    setOutputs(result) {
-        core.setOutput('quality-score', result.qualityScore.toString());
-        core.setOutput('issues-found', result.issuesFound.toString());
-        core.setOutput('critical-issues', result.criticalIssues.toString());
-        core.setOutput('high-issues', result.highIssues.toString());
-        core.setOutput('medium-issues', result.mediumIssues.toString());
-        core.setOutput('low-issues', result.lowIssues.toString());
-        core.setOutput('risk-score', result.riskScore.toString());
-        core.setOutput('passed', result.passed.toString());
-        if (result.reportUrl) {
-            core.setOutput('report-url', result.reportUrl);
-        }
-    }
-}
-// Run the action
-async function run() {
-    const action = new KiroLinterDevOpsAction();
-    await action.run();
-}
-run().catch(error => {
-    core.setFailed(error.message);
-});
-
-
-/***/ }),
-
 /***/ 2613:
 /***/ ((module) => {
 
@@ -43708,7 +43269,7 @@ module.exports = parseParams
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
-/*! Axios v1.11.0 Copyright (c) 2025 Matt Zabriskie and contributors */
+/*! Axios v1.12.1 Copyright (c) 2025 Matt Zabriskie and contributors */
 
 
 const FormData$1 = __nccwpck_require__(6454);
@@ -43787,7 +43348,7 @@ const isUndefined = typeOfTest('undefined');
  */
 function isBuffer(val) {
   return val !== null && !isUndefined(val) && val.constructor !== null && !isUndefined(val.constructor)
-    && isFunction(val.constructor.isBuffer) && val.constructor.isBuffer(val);
+    && isFunction$1(val.constructor.isBuffer) && val.constructor.isBuffer(val);
 }
 
 /**
@@ -43832,7 +43393,7 @@ const isString = typeOfTest('string');
  * @param {*} val The value to test
  * @returns {boolean} True if value is a Function, otherwise false
  */
-const isFunction = typeOfTest('function');
+const isFunction$1 = typeOfTest('function');
 
 /**
  * Determine if a value is a Number
@@ -43888,7 +43449,7 @@ const isEmptyObject = (val) => {
   if (!isObject(val) || isBuffer(val)) {
     return false;
   }
-  
+
   try {
     return Object.keys(val).length === 0 && Object.getPrototypeOf(val) === Object.prototype;
   } catch (e) {
@@ -43940,7 +43501,7 @@ const isFileList = kindOfTest('FileList');
  *
  * @returns {boolean} True if value is a Stream, otherwise false
  */
-const isStream = (val) => isObject(val) && isFunction(val.pipe);
+const isStream = (val) => isObject(val) && isFunction$1(val.pipe);
 
 /**
  * Determine if a value is a FormData
@@ -43953,10 +43514,10 @@ const isFormData = (thing) => {
   let kind;
   return thing && (
     (typeof FormData === 'function' && thing instanceof FormData) || (
-      isFunction(thing.append) && (
+      isFunction$1(thing.append) && (
         (kind = kindOf(thing)) === 'formdata' ||
         // detect form-data instance
-        (kind === 'object' && isFunction(thing.toString) && thing.toString() === '[object FormData]')
+        (kind === 'object' && isFunction$1(thing.toString) && thing.toString() === '[object FormData]')
       )
     )
   )
@@ -44081,7 +43642,7 @@ const isContextDefined = (context) => !isUndefined(context) && context !== _glob
  * @returns {Object} Result of all merge properties
  */
 function merge(/* obj1, obj2, obj3, ... */) {
-  const {caseless} = isContextDefined(this) && this || {};
+  const {caseless, skipUndefined} = isContextDefined(this) && this || {};
   const result = {};
   const assignValue = (val, key) => {
     const targetKey = caseless && findKey(result, key) || key;
@@ -44092,7 +43653,9 @@ function merge(/* obj1, obj2, obj3, ... */) {
     } else if (isArray(val)) {
       result[targetKey] = val.slice();
     } else {
-      result[targetKey] = val;
+      if (!skipUndefined || !isUndefined(val)) {
+        result[targetKey] = val;
+      }
     }
   };
 
@@ -44114,7 +43677,7 @@ function merge(/* obj1, obj2, obj3, ... */) {
  */
 const extend = (a, b, thisArg, {allOwnKeys}= {}) => {
   forEach(b, (val, key) => {
-    if (thisArg && isFunction(val)) {
+    if (thisArg && isFunction$1(val)) {
       a[key] = bind(val, thisArg);
     } else {
       a[key] = val;
@@ -44330,13 +43893,13 @@ const reduceDescriptors = (obj, reducer) => {
 const freezeMethods = (obj) => {
   reduceDescriptors(obj, (descriptor, name) => {
     // skip restricted props in strict mode
-    if (isFunction(obj) && ['arguments', 'caller', 'callee'].indexOf(name) !== -1) {
+    if (isFunction$1(obj) && ['arguments', 'caller', 'callee'].indexOf(name) !== -1) {
       return false;
     }
 
     const value = obj[name];
 
-    if (!isFunction(value)) return;
+    if (!isFunction$1(value)) return;
 
     descriptor.enumerable = false;
 
@@ -44373,6 +43936,8 @@ const toFiniteNumber = (value, defaultValue) => {
   return value != null && Number.isFinite(value = +value) ? value : defaultValue;
 };
 
+
+
 /**
  * If the thing is a FormData object, return true, otherwise return false.
  *
@@ -44381,7 +43946,7 @@ const toFiniteNumber = (value, defaultValue) => {
  * @returns {boolean}
  */
 function isSpecCompliantForm(thing) {
-  return !!(thing && isFunction(thing.append) && thing[toStringTag] === 'FormData' && thing[iterator]);
+  return !!(thing && isFunction$1(thing.append) && thing[toStringTag] === 'FormData' && thing[iterator]);
 }
 
 const toJSONObject = (obj) => {
@@ -44423,7 +43988,7 @@ const toJSONObject = (obj) => {
 const isAsyncFn = kindOfTest('AsyncFunction');
 
 const isThenable = (thing) =>
-  thing && (isObject(thing) || isFunction(thing)) && isFunction(thing.then) && isFunction(thing.catch);
+  thing && (isObject(thing) || isFunction$1(thing)) && isFunction$1(thing.then) && isFunction$1(thing.catch);
 
 // original code
 // https://github.com/DigitalBrainJS/AxiosPromise/blob/16deab13710ec09779922131f3fa5954320f83ab/lib/utils.js#L11-L34
@@ -44447,7 +44012,7 @@ const _setImmediate = ((setImmediateSupported, postMessageSupported) => {
   })(`axios@${Math.random()}`, []) : (cb) => setTimeout(cb);
 })(
   typeof setImmediate === 'function',
-  isFunction(_global.postMessage)
+  isFunction$1(_global.postMessage)
 );
 
 const asap = typeof queueMicrotask !== 'undefined' ?
@@ -44456,7 +44021,7 @@ const asap = typeof queueMicrotask !== 'undefined' ?
 // *********************
 
 
-const isIterable = (thing) => thing != null && isFunction(thing[iterator]);
+const isIterable = (thing) => thing != null && isFunction$1(thing[iterator]);
 
 
 const utils$1 = {
@@ -44480,7 +44045,7 @@ const utils$1 = {
   isFile,
   isBlob,
   isRegExp,
-  isFunction,
+  isFunction: isFunction$1,
   isStream,
   isURLSearchParams,
   isTypedArray,
@@ -44606,11 +44171,18 @@ AxiosError.from = (error, code, config, request, response, customProps) => {
     return prop !== 'isAxiosError';
   });
 
-  AxiosError.call(axiosError, error.message, code, config, request, response);
+  const msg = error && error.message ? error.message : 'Error';
 
-  axiosError.cause = error;
+  // Prefer explicit code; otherwise copy the low-level error's code (e.g. ECONNREFUSED)
+  const errCode = code == null && error ? error.code : code;
+  AxiosError.call(axiosError, msg, errCode, config, request, response);
 
-  axiosError.name = error.name;
+  // Chain the original error on the standard field; non-enumerable to avoid JSON noise
+  if (error && axiosError.cause == null) {
+    Object.defineProperty(axiosError, 'cause', { value: error, configurable: true });
+  }
+
+  axiosError.name = (error && error.name) || 'Error';
 
   customProps && Object.assign(axiosError, customProps);
 
@@ -44898,9 +44470,7 @@ function encode(val) {
     replace(/%3A/gi, ':').
     replace(/%24/g, '$').
     replace(/%2C/gi, ',').
-    replace(/%20/g, '+').
-    replace(/%5B/gi, '[').
-    replace(/%5D/gi, ']');
+    replace(/%20/g, '+');
 }
 
 /**
@@ -45326,7 +44896,7 @@ const defaults = {
       const strictJSONParsing = !silentJSONParsing && JSONRequested;
 
       try {
-        return JSON.parse(data);
+        return JSON.parse(data, this.parseReviver);
       } catch (e) {
         if (strictJSONParsing) {
           if (e.name === 'SyntaxError') {
@@ -45853,7 +45423,7 @@ function buildFullPath(baseURL, requestedURL, allowAbsoluteUrls) {
   return requestedURL;
 }
 
-const VERSION = "1.11.0";
+const VERSION = "1.12.1";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
@@ -46346,6 +45916,80 @@ const progressEventDecorator = (total, throttled) => {
 
 const asyncDecorator = (fn) => (...args) => utils$1.asap(() => fn(...args));
 
+/**
+ * Estimate decoded byte length of a data:// URL *without* allocating large buffers.
+ * - For base64: compute exact decoded size using length and padding;
+ *               handle %XX at the character-count level (no string allocation).
+ * - For non-base64: use UTF-8 byteLength of the encoded body as a safe upper bound.
+ *
+ * @param {string} url
+ * @returns {number}
+ */
+function estimateDataURLDecodedBytes(url) {
+  if (!url || typeof url !== 'string') return 0;
+  if (!url.startsWith('data:')) return 0;
+
+  const comma = url.indexOf(',');
+  if (comma < 0) return 0;
+
+  const meta = url.slice(5, comma);
+  const body = url.slice(comma + 1);
+  const isBase64 = /;base64/i.test(meta);
+
+  if (isBase64) {
+    let effectiveLen = body.length;
+    const len = body.length; // cache length
+
+    for (let i = 0; i < len; i++) {
+      if (body.charCodeAt(i) === 37 /* '%' */ && i + 2 < len) {
+        const a = body.charCodeAt(i + 1);
+        const b = body.charCodeAt(i + 2);
+        const isHex =
+          ((a >= 48 && a <= 57) || (a >= 65 && a <= 70) || (a >= 97 && a <= 102)) &&
+          ((b >= 48 && b <= 57) || (b >= 65 && b <= 70) || (b >= 97 && b <= 102));
+
+        if (isHex) {
+          effectiveLen -= 2;
+          i += 2;
+        }
+      }
+    }
+
+    let pad = 0;
+    let idx = len - 1;
+
+    const tailIsPct3D = (j) =>
+      j >= 2 &&
+      body.charCodeAt(j - 2) === 37 && // '%'
+      body.charCodeAt(j - 1) === 51 && // '3'
+      (body.charCodeAt(j) === 68 || body.charCodeAt(j) === 100); // 'D' or 'd'
+
+    if (idx >= 0) {
+      if (body.charCodeAt(idx) === 61 /* '=' */) {
+        pad++;
+        idx--;
+      } else if (tailIsPct3D(idx)) {
+        pad++;
+        idx -= 3;
+      }
+    }
+
+    if (pad === 1 && idx >= 0) {
+      if (body.charCodeAt(idx) === 61 /* '=' */) {
+        pad++;
+      } else if (tailIsPct3D(idx)) {
+        pad++;
+      }
+    }
+
+    const groups = Math.floor(effectiveLen / 4);
+    const bytes = groups * 3 - (pad || 0);
+    return bytes > 0 ? bytes : 0;
+  }
+
+  return Buffer.byteLength(body, 'utf8');
+}
+
 const zlibOptions = {
   flush: zlib__default["default"].constants.Z_SYNC_FLUSH,
   finishFlush: zlib__default["default"].constants.Z_SYNC_FLUSH
@@ -46366,6 +46010,7 @@ const supportedProtocols = platform.protocols.map(protocol => {
   return protocol + ':';
 });
 
+
 const flushOnFinish = (stream, [throttled, flush]) => {
   stream
     .on('end', flush)
@@ -46373,6 +46018,7 @@ const flushOnFinish = (stream, [throttled, flush]) => {
 
   return throttled;
 };
+
 
 /**
  * If the proxy or config beforeRedirects functions are defined, call them with the options
@@ -46553,6 +46199,21 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
     const protocol = parsed.protocol || supportedProtocols[0];
 
     if (protocol === 'data:') {
+      // Apply the same semantics as HTTP: only enforce if a finite, non-negative cap is set.
+      if (config.maxContentLength > -1) {
+        // Use the exact string passed to fromDataURI (config.url); fall back to fullPath if needed.
+        const dataUrl = String(config.url || fullPath || '');
+        const estimated = estimateDataURLDecodedBytes(dataUrl);
+
+        if (estimated > config.maxContentLength) {
+          return reject(new AxiosError(
+            'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+            AxiosError.ERR_BAD_RESPONSE,
+            config
+          ));
+        }
+      }
+
       let convertedData;
 
       if (method !== 'GET') {
@@ -47167,7 +46828,7 @@ function mergeConfig(config1, config2) {
 const resolveConfig = (config) => {
   const newConfig = mergeConfig({}, config);
 
-  let {data, withXSRFToken, xsrfHeaderName, xsrfCookieName, headers, auth} = newConfig;
+  let { data, withXSRFToken, xsrfHeaderName, xsrfCookieName, headers, auth } = newConfig;
 
   newConfig.headers = headers = AxiosHeaders$1.from(headers);
 
@@ -47180,17 +46841,21 @@ const resolveConfig = (config) => {
     );
   }
 
-  let contentType;
-
   if (utils$1.isFormData(data)) {
     if (platform.hasStandardBrowserEnv || platform.hasStandardBrowserWebWorkerEnv) {
-      headers.setContentType(undefined); // Let the browser set it
-    } else if ((contentType = headers.getContentType()) !== false) {
-      // fix semicolon duplication issue for ReactNative FormData implementation
-      const [type, ...tokens] = contentType ? contentType.split(';').map(token => token.trim()).filter(Boolean) : [];
-      headers.setContentType([type || 'multipart/form-data', ...tokens].join('; '));
+      headers.setContentType(undefined); // browser handles it
+    } else if (utils$1.isFunction(data.getHeaders)) {
+      // Node.js FormData (like form-data package)
+      const formHeaders = data.getHeaders();
+      // Only set safe headers to avoid overwriting security headers
+      const allowedHeaders = ['content-type', 'content-length'];
+      Object.entries(formHeaders).forEach(([key, val]) => {
+        if (allowedHeaders.includes(key.toLowerCase())) {
+          headers.set(key, val);
+        }
+      });
     }
-  }
+  }  
 
   // Add xsrf header
   // This is only done if running in a standard browser environment.
@@ -47307,15 +46972,18 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
     };
 
     // Handle low level network errors
-    request.onerror = function handleError() {
-      // Real errors are hidden from us by the browser
-      // onerror should only fire if it's a network error
-      reject(new AxiosError('Network Error', AxiosError.ERR_NETWORK, config, request));
-
-      // Clean up request
-      request = null;
+  request.onerror = function handleError(event) {
+       // Browsers deliver a ProgressEvent in XHR onerror
+       // (message may be empty; when present, surface it)
+       // See https://developer.mozilla.org/docs/Web/API/XMLHttpRequest/error_event
+       const msg = event && event.message ? event.message : 'Network Error';
+       const err = new AxiosError(msg, AxiosError.ERR_NETWORK, config, request);
+       // attach the underlying event for consumers who want details
+       err.event = event || null;
+       reject(err);
+       request = null;
     };
-
+    
     // Handle timeout
     request.ontimeout = function handleTimeout() {
       let timeoutErrorMessage = _config.timeout ? 'timeout of ' + _config.timeout + 'ms exceeded' : 'timeout exceeded';
@@ -47531,14 +47199,18 @@ const trackStream = (stream, chunkSize, onProgress, onFinish) => {
   })
 };
 
-const isFetchSupported = typeof fetch === 'function' && typeof Request === 'function' && typeof Response === 'function';
-const isReadableStreamSupported = isFetchSupported && typeof ReadableStream === 'function';
+const DEFAULT_CHUNK_SIZE = 64 * 1024;
 
-// used only inside the fetch adapter
-const encodeText = isFetchSupported && (typeof TextEncoder === 'function' ?
-    ((encoder) => (str) => encoder.encode(str))(new TextEncoder()) :
-    async (str) => new Uint8Array(await new Response(str).arrayBuffer())
-);
+const {isFunction} = utils$1;
+
+const globalFetchAPI = (({fetch, Request, Response}) => ({
+    fetch, Request, Response
+  }))(utils$1.global);
+
+const {
+  ReadableStream: ReadableStream$1, TextEncoder: TextEncoder$1
+} = utils$1.global;
+
 
 const test = (fn, ...args) => {
   try {
@@ -47548,211 +47220,266 @@ const test = (fn, ...args) => {
   }
 };
 
-const supportsRequestStream = isReadableStreamSupported && test(() => {
-  let duplexAccessed = false;
+const factory = (env) => {
+  const {fetch, Request, Response} = Object.assign({}, globalFetchAPI, env);
+  const isFetchSupported = isFunction(fetch);
+  const isRequestSupported = isFunction(Request);
+  const isResponseSupported = isFunction(Response);
 
-  const hasContentType = new Request(platform.origin, {
-    body: new ReadableStream(),
-    method: 'POST',
-    get duplex() {
-      duplexAccessed = true;
-      return 'half';
-    },
-  }).headers.has('Content-Type');
+  if (!isFetchSupported) {
+    return false;
+  }
 
-  return duplexAccessed && !hasContentType;
-});
+  const isReadableStreamSupported = isFetchSupported && isFunction(ReadableStream$1);
 
-const DEFAULT_CHUNK_SIZE = 64 * 1024;
+  const encodeText = isFetchSupported && (typeof TextEncoder$1 === 'function' ?
+      ((encoder) => (str) => encoder.encode(str))(new TextEncoder$1()) :
+      async (str) => new Uint8Array(await new Request(str).arrayBuffer())
+  );
 
-const supportsResponseStream = isReadableStreamSupported &&
-  test(() => utils$1.isReadableStream(new Response('').body));
+  const supportsRequestStream = isRequestSupported && isReadableStreamSupported && test(() => {
+    let duplexAccessed = false;
 
+    const hasContentType = new Request(platform.origin, {
+      body: new ReadableStream$1(),
+      method: 'POST',
+      get duplex() {
+        duplexAccessed = true;
+        return 'half';
+      },
+    }).headers.has('Content-Type');
 
-const resolvers = {
-  stream: supportsResponseStream && ((res) => res.body)
-};
+    return duplexAccessed && !hasContentType;
+  });
 
-isFetchSupported && (((res) => {
-  ['text', 'arrayBuffer', 'blob', 'formData', 'stream'].forEach(type => {
-    !resolvers[type] && (resolvers[type] = utils$1.isFunction(res[type]) ? (res) => res[type]() :
-      (_, config) => {
+  const supportsResponseStream = isResponseSupported && isReadableStreamSupported &&
+    test(() => utils$1.isReadableStream(new Response('').body));
+
+  const resolvers = {
+    stream: supportsResponseStream && ((res) => res.body)
+  };
+
+  isFetchSupported && ((() => {
+    ['text', 'arrayBuffer', 'blob', 'formData', 'stream'].forEach(type => {
+      !resolvers[type] && (resolvers[type] = (res, config) => {
+        let method = res && res[type];
+
+        if (method) {
+          return method.call(res);
+        }
+
         throw new AxiosError(`Response type '${type}' is not supported`, AxiosError.ERR_NOT_SUPPORT, config);
       });
-  });
-})(new Response));
-
-const getBodyLength = async (body) => {
-  if (body == null) {
-    return 0;
-  }
-
-  if(utils$1.isBlob(body)) {
-    return body.size;
-  }
-
-  if(utils$1.isSpecCompliantForm(body)) {
-    const _request = new Request(platform.origin, {
-      method: 'POST',
-      body,
     });
-    return (await _request.arrayBuffer()).byteLength;
-  }
+  })());
 
-  if(utils$1.isArrayBufferView(body) || utils$1.isArrayBuffer(body)) {
-    return body.byteLength;
-  }
+  const getBodyLength = async (body) => {
+    if (body == null) {
+      return 0;
+    }
 
-  if(utils$1.isURLSearchParams(body)) {
-    body = body + '';
-  }
+    if (utils$1.isBlob(body)) {
+      return body.size;
+    }
 
-  if(utils$1.isString(body)) {
-    return (await encodeText(body)).byteLength;
-  }
-};
-
-const resolveBodyLength = async (headers, body) => {
-  const length = utils$1.toFiniteNumber(headers.getContentLength());
-
-  return length == null ? getBodyLength(body) : length;
-};
-
-const fetchAdapter = isFetchSupported && (async (config) => {
-  let {
-    url,
-    method,
-    data,
-    signal,
-    cancelToken,
-    timeout,
-    onDownloadProgress,
-    onUploadProgress,
-    responseType,
-    headers,
-    withCredentials = 'same-origin',
-    fetchOptions
-  } = resolveConfig(config);
-
-  responseType = responseType ? (responseType + '').toLowerCase() : 'text';
-
-  let composedSignal = composeSignals$1([signal, cancelToken && cancelToken.toAbortSignal()], timeout);
-
-  let request;
-
-  const unsubscribe = composedSignal && composedSignal.unsubscribe && (() => {
-      composedSignal.unsubscribe();
-  });
-
-  let requestContentLength;
-
-  try {
-    if (
-      onUploadProgress && supportsRequestStream && method !== 'get' && method !== 'head' &&
-      (requestContentLength = await resolveBodyLength(headers, data)) !== 0
-    ) {
-      let _request = new Request(url, {
+    if (utils$1.isSpecCompliantForm(body)) {
+      const _request = new Request(platform.origin, {
         method: 'POST',
-        body: data,
-        duplex: "half"
+        body,
       });
-
-      let contentTypeHeader;
-
-      if (utils$1.isFormData(data) && (contentTypeHeader = _request.headers.get('content-type'))) {
-        headers.setContentType(contentTypeHeader);
-      }
-
-      if (_request.body) {
-        const [onProgress, flush] = progressEventDecorator(
-          requestContentLength,
-          progressEventReducer(asyncDecorator(onUploadProgress))
-        );
-
-        data = trackStream(_request.body, DEFAULT_CHUNK_SIZE, onProgress, flush);
-      }
+      return (await _request.arrayBuffer()).byteLength;
     }
 
-    if (!utils$1.isString(withCredentials)) {
-      withCredentials = withCredentials ? 'include' : 'omit';
+    if (utils$1.isArrayBufferView(body) || utils$1.isArrayBuffer(body)) {
+      return body.byteLength;
     }
 
-    // Cloudflare Workers throws when credentials are defined
-    // see https://github.com/cloudflare/workerd/issues/902
-    const isCredentialsSupported = "credentials" in Request.prototype;
-    request = new Request(url, {
-      ...fetchOptions,
-      signal: composedSignal,
-      method: method.toUpperCase(),
-      headers: headers.normalize().toJSON(),
-      body: data,
-      duplex: "half",
-      credentials: isCredentialsSupported ? withCredentials : undefined
+    if (utils$1.isURLSearchParams(body)) {
+      body = body + '';
+    }
+
+    if (utils$1.isString(body)) {
+      return (await encodeText(body)).byteLength;
+    }
+  };
+
+  const resolveBodyLength = async (headers, body) => {
+    const length = utils$1.toFiniteNumber(headers.getContentLength());
+
+    return length == null ? getBodyLength(body) : length;
+  };
+
+  return async (config) => {
+    let {
+      url,
+      method,
+      data,
+      signal,
+      cancelToken,
+      timeout,
+      onDownloadProgress,
+      onUploadProgress,
+      responseType,
+      headers,
+      withCredentials = 'same-origin',
+      fetchOptions
+    } = resolveConfig(config);
+
+    responseType = responseType ? (responseType + '').toLowerCase() : 'text';
+
+    let composedSignal = composeSignals$1([signal, cancelToken && cancelToken.toAbortSignal()], timeout);
+
+    let request = null;
+
+    const unsubscribe = composedSignal && composedSignal.unsubscribe && (() => {
+      composedSignal.unsubscribe();
     });
 
-    let response = await fetch(request, fetchOptions);
+    let requestContentLength;
 
-    const isStreamResponse = supportsResponseStream && (responseType === 'stream' || responseType === 'response');
+    try {
+      if (
+        onUploadProgress && supportsRequestStream && method !== 'get' && method !== 'head' &&
+        (requestContentLength = await resolveBodyLength(headers, data)) !== 0
+      ) {
+        let _request = new Request(url, {
+          method: 'POST',
+          body: data,
+          duplex: "half"
+        });
 
-    if (supportsResponseStream && (onDownloadProgress || (isStreamResponse && unsubscribe))) {
-      const options = {};
+        let contentTypeHeader;
 
-      ['status', 'statusText', 'headers'].forEach(prop => {
-        options[prop] = response[prop];
-      });
-
-      const responseContentLength = utils$1.toFiniteNumber(response.headers.get('content-length'));
-
-      const [onProgress, flush] = onDownloadProgress && progressEventDecorator(
-        responseContentLength,
-        progressEventReducer(asyncDecorator(onDownloadProgress), true)
-      ) || [];
-
-      response = new Response(
-        trackStream(response.body, DEFAULT_CHUNK_SIZE, onProgress, () => {
-          flush && flush();
-          unsubscribe && unsubscribe();
-        }),
-        options
-      );
-    }
-
-    responseType = responseType || 'text';
-
-    let responseData = await resolvers[utils$1.findKey(resolvers, responseType) || 'text'](response, config);
-
-    !isStreamResponse && unsubscribe && unsubscribe();
-
-    return await new Promise((resolve, reject) => {
-      settle(resolve, reject, {
-        data: responseData,
-        headers: AxiosHeaders$1.from(response.headers),
-        status: response.status,
-        statusText: response.statusText,
-        config,
-        request
-      });
-    })
-  } catch (err) {
-    unsubscribe && unsubscribe();
-
-    if (err && err.name === 'TypeError' && /Load failed|fetch/i.test(err.message)) {
-      throw Object.assign(
-        new AxiosError('Network Error', AxiosError.ERR_NETWORK, config, request),
-        {
-          cause: err.cause || err
+        if (utils$1.isFormData(data) && (contentTypeHeader = _request.headers.get('content-type'))) {
+          headers.setContentType(contentTypeHeader);
         }
-      )
-    }
 
-    throw AxiosError.from(err, err && err.code, config, request);
+        if (_request.body) {
+          const [onProgress, flush] = progressEventDecorator(
+            requestContentLength,
+            progressEventReducer(asyncDecorator(onUploadProgress))
+          );
+
+          data = trackStream(_request.body, DEFAULT_CHUNK_SIZE, onProgress, flush);
+        }
+      }
+
+      if (!utils$1.isString(withCredentials)) {
+        withCredentials = withCredentials ? 'include' : 'omit';
+      }
+
+      // Cloudflare Workers throws when credentials are defined
+      // see https://github.com/cloudflare/workerd/issues/902
+      const isCredentialsSupported = isRequestSupported && "credentials" in Request.prototype;
+
+      const resolvedOptions = {
+        ...fetchOptions,
+        signal: composedSignal,
+        method: method.toUpperCase(),
+        headers: headers.normalize().toJSON(),
+        body: data,
+        duplex: "half",
+        credentials: isCredentialsSupported ? withCredentials : undefined
+      };
+
+      request = isRequestSupported && new Request(url, resolvedOptions);
+
+      let response = await (isRequestSupported ? fetch(request, fetchOptions) : fetch(url, resolvedOptions));
+
+      const isStreamResponse = supportsResponseStream && (responseType === 'stream' || responseType === 'response');
+
+      if (supportsResponseStream && (onDownloadProgress || (isStreamResponse && unsubscribe))) {
+        const options = {};
+
+        ['status', 'statusText', 'headers'].forEach(prop => {
+          options[prop] = response[prop];
+        });
+
+        const responseContentLength = utils$1.toFiniteNumber(response.headers.get('content-length'));
+
+        const [onProgress, flush] = onDownloadProgress && progressEventDecorator(
+          responseContentLength,
+          progressEventReducer(asyncDecorator(onDownloadProgress), true)
+        ) || [];
+
+        response = new Response(
+          trackStream(response.body, DEFAULT_CHUNK_SIZE, onProgress, () => {
+            flush && flush();
+            unsubscribe && unsubscribe();
+          }),
+          options
+        );
+      }
+
+      responseType = responseType || 'text';
+
+      let responseData = await resolvers[utils$1.findKey(resolvers, responseType) || 'text'](response, config);
+
+      !isStreamResponse && unsubscribe && unsubscribe();
+
+      return await new Promise((resolve, reject) => {
+        settle(resolve, reject, {
+          data: responseData,
+          headers: AxiosHeaders$1.from(response.headers),
+          status: response.status,
+          statusText: response.statusText,
+          config,
+          request
+        });
+      })
+    } catch (err) {
+      unsubscribe && unsubscribe();
+
+      if (err && err.name === 'TypeError' && /Load failed|fetch/i.test(err.message)) {
+        throw Object.assign(
+          new AxiosError('Network Error', AxiosError.ERR_NETWORK, config, request),
+          {
+            cause: err.cause || err
+          }
+        )
+      }
+
+      throw AxiosError.from(err, err && err.code, config, request);
+    }
   }
-});
+};
+
+const seedCache = new Map();
+
+const getFetch = (config) => {
+  let env = utils$1.merge.call({
+    skipUndefined: true
+  }, globalFetchAPI, config ? config.env : null);
+
+  const {fetch, Request, Response} = env;
+
+  const seeds = [
+    Request, Response, fetch
+  ];
+
+  let len = seeds.length, i = len,
+    seed, target, map = seedCache;
+
+  while (i--) {
+    seed = seeds[i];
+    target = map.get(seed);
+
+    target === undefined && map.set(seed, target = (i ? new Map() : factory(env)));
+
+    map = target;
+  }
+
+  return target;
+};
+
+getFetch();
 
 const knownAdapters = {
   http: httpAdapter,
   xhr: xhrAdapter,
-  fetch: fetchAdapter
+  fetch: {
+    get: getFetch,
+  }
 };
 
 utils$1.forEach(knownAdapters, (fn, value) => {
@@ -47771,7 +47498,7 @@ const renderReason = (reason) => `- ${reason}`;
 const isResolvedHandle = (adapter) => utils$1.isFunction(adapter) || adapter === null || adapter === false;
 
 const adapters = {
-  getAdapter: (adapters) => {
+  getAdapter: (adapters, config) => {
     adapters = utils$1.isArray(adapters) ? adapters : [adapters];
 
     const {length} = adapters;
@@ -47794,7 +47521,7 @@ const adapters = {
         }
       }
 
-      if (adapter) {
+      if (adapter && (utils$1.isFunction(adapter) || (adapter = adapter.get(config)))) {
         break;
       }
 
@@ -47862,7 +47589,7 @@ function dispatchRequest(config) {
     config.headers.setContentType('application/x-www-form-urlencoded', false);
   }
 
-  const adapter = adapters.getAdapter(config.adapter || defaults$1.adapter);
+  const adapter = adapters.getAdapter(config.adapter || defaults$1.adapter, config);
 
   return adapter(config).then(function onAdapterResolution(response) {
     throwIfCancellationRequested(config);
@@ -48582,13 +48309,446 @@ module.exports = /*#__PURE__*/JSON.parse('{"application/1d-interleaved-parityfec
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(9407);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
+var __webpack_exports__ = {};
+const core = __nccwpck_require__(7484);
+const github = __nccwpck_require__(3228);
+const exec = __nccwpck_require__(5236);
+const fs = __nccwpck_require__(2136);
+const path = __nccwpck_require__(6928);
+const axios = __nccwpck_require__(7269);
+const yaml = __nccwpck_require__(4281);
+
+class KiroLinterDevOpsAction {
+  constructor() {
+    this.config = this.parseInputs();
+    this.octokit = github.getOctokit(core.getInput('github-token'));
+    this.context = github.context;
+  }
+
+  parseInputs() {
+    return {
+      gateType: core.getInput('gate-type') || 'pre-merge',
+      riskAssessment: core.getBooleanInput('risk-assessment'),
+      deploymentAnalysis: core.getBooleanInput('deployment-analysis'),
+      failOnIssues: core.getBooleanInput('fail-on-issues'),
+      severityThreshold: core.getInput('severity-threshold') || 'medium',
+      timeout: parseInt(core.getInput('timeout')) || 300,
+      outputFormat: core.getInput('output-format') || 'markdown',
+      createPrComment: core.getBooleanInput('create-pr-comment'),
+      createCheckRun: core.getBooleanInput('create-check-run'),
+      configPath: core.getInput('config-path') || '.kirolinter.yml',
+      endpoint: core.getInput('kirolinter-endpoint') || 'https://api.kirolinter.dev',
+      token: core.getInput('kirolinter-token')
+    };
+  }
+
+  async run() {
+    try {
+      core.info(`🚀 Starting KiroLinter DevOps Quality Gate - ${this.config.gateType}`);
+      
+      // Create check run if requested
+      let checkRun = null;
+      if (this.config.createCheckRun) {
+        checkRun = await this.createCheckRun();
+        core.info(`✅ Created check run: ${checkRun.data.html_url}`);
+      }
+
+      // Load configuration
+      const config = await this.loadConfiguration();
+      
+      // Run quality analysis
+      const result = await this.runQualityAnalysis(config);
+
+      // Update check run with results
+      if (checkRun) {
+        await this.updateCheckRun(checkRun.data.id, result);
+        core.setOutput('check-run-id', checkRun.data.id);
+      }
+
+      // Create PR comment if requested
+      if (this.config.createPrComment && this.context.payload.pull_request) {
+        await this.createPrComment(result);
+        core.info('✅ Created PR comment with quality report');
+      }
+
+      // Set outputs
+      this.setOutputs(result);
+
+      // Generate SARIF report
+      if (this.config.outputFormat === 'sarif') {
+        const sarifPath = await this.generateSarifReport(result);
+        core.setOutput('sarif-file', sarifPath);
+      }
+
+      // Determine success/failure
+      if (this.config.failOnIssues && !result.passed) {
+        core.setFailed(`Quality gate failed: ${result.criticalIssues} critical, ${result.highIssues} high severity issues found`);
+      } else {
+        core.info(`✅ Quality gate passed! Score: ${result.qualityScore}/100`);
+      }
+
+    } catch (error) {
+      core.setFailed(`Action failed: ${error.message}`);
+    }
+  }
+
+  async loadConfiguration() {
+    try {
+      if (await fs.pathExists(this.config.configPath)) {
+        const configContent = await fs.readFile(this.config.configPath, 'utf8');
+        return yaml.load(configContent);
+      } else {
+        core.info(`ℹ️ No configuration file found at ${this.config.configPath}, using defaults`);
+        return {};
+      }
+    } catch (error) {
+      core.warning(`Failed to load configuration: ${error}`);
+      return {};
+    }
+  }
+
+  async runQualityAnalysis(config) {
+    core.info('🔍 Running quality analysis...');
+
+    try {
+      // Check if KiroLinter is available locally
+      const isLocal = await this.checkLocalKiroLinter();
+      
+      if (isLocal) {
+        return await this.runLocalAnalysis(config);
+      } else if (this.config.token) {
+        return await this.runCloudAnalysis(config);
+      } else {
+        // Install and run KiroLinter
+        return await this.installAndRunKiroLinter(config);
+      }
+    } catch (error) {
+      core.error(`Analysis failed: ${error}`);
+      throw error;
+    }
+  }
+
+  async checkLocalKiroLinter() {
+    try {
+      let exitCode = 0;
+      await exec.exec('kirolinter', ['--version'], {
+        listeners: {
+          stdout: (data) => {
+            core.info(`KiroLinter version: ${data.toString()}`);
+          }
+        },
+        ignoreReturnCode: true
+      }).then((code) => {
+        exitCode = code;
+      });
+      return exitCode === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async installAndRunKiroLinter(config) {
+    core.info('📦 Installing KiroLinter...');
+    
+    // Install KiroLinter from current directory in editable mode
+    await exec.exec('pip', ['install', '-e', '.']);
+    
+    return await this.runLocalAnalysis(config);
+  }
+
+  async runLocalAnalysis(config) {
+    core.info('🔍 Running local KiroLinter analysis...');
+
+    const args = [
+      'devops',
+      'gate',
+      '--type', this.config.gateType,
+      '--format', 'json',
+      '--severity-threshold', this.config.severityThreshold
+    ];
+
+    if (this.config.riskAssessment) {
+      args.push('--risk-assessment');
+    }
+
+    if (this.config.deploymentAnalysis) {
+      args.push('--deployment-analysis');
+    }
+
+    if (this.config.configPath && await fs.pathExists(this.config.configPath)) {
+      args.push('--config', this.config.configPath);
+    }
+
+    let output = '';
+    await exec.exec('kirolinter', args, {
+      listeners: {
+        stdout: (data) => {
+          output += data.toString();
+        },
+        stderr: (data) => {
+          core.warning(data.toString());
+        }
+      },
+      ignoreReturnCode: true
+    });
+
+    try {
+      const result = JSON.parse(output);
+      return this.normalizeResult(result);
+    } catch (error) {
+      throw new Error(`Failed to parse KiroLinter output: ${error}`);
+    }
+  }
+
+  async runCloudAnalysis(config) {
+    core.info('☁️ Running cloud KiroLinter analysis...');
+
+    const payload = {
+      gateType: this.config.gateType,
+      repository: this.context.repo,
+      ref: this.context.sha,
+      pullRequest: this.context.payload.pull_request?.number,
+      config: config,
+      options: {
+        riskAssessment: this.config.riskAssessment,
+        deploymentAnalysis: this.config.deploymentAnalysis,
+        severityThreshold: this.config.severityThreshold
+      }
+    };
+
+    const response = await axios.post(`${this.config.endpoint}/v1/quality-gate`, payload, {
+      headers: {
+        'Authorization': `Bearer ${this.config.token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'KiroLinter-GitHub-Action/1.0.0'
+      },
+      timeout: this.config.timeout * 1000
+    });
+
+    return this.normalizeResult(response.data);
+  }
+
+  normalizeResult(rawResult) {
+    return {
+      qualityScore: rawResult.quality_score || rawResult.qualityScore || 0,
+      issuesFound: rawResult.issues_found || rawResult.issuesFound || 0,
+      criticalIssues: rawResult.critical_issues || rawResult.criticalIssues || 0,
+      highIssues: rawResult.high_issues || rawResult.highIssues || 0,
+      mediumIssues: rawResult.medium_issues || rawResult.mediumIssues || 0,
+      lowIssues: rawResult.low_issues || rawResult.lowIssues || 0,
+      riskScore: rawResult.risk_score || rawResult.riskScore || 0,
+      passed: rawResult.passed || (rawResult.quality_score || rawResult.qualityScore || 0) >= 70,
+      reportUrl: rawResult.report_url || rawResult.reportUrl,
+      issues: rawResult.issues || [],
+      recommendations: rawResult.recommendations || []
+    };
+  }
+
+  async createCheckRun() {
+    return await this.octokit.rest.checks.create({
+      owner: this.context.repo.owner,
+      repo: this.context.repo.repo,
+      name: `KiroLinter DevOps - ${this.config.gateType.replace('_', ' ')}`,
+      head_sha: this.context.sha,
+      status: 'in_progress',
+      started_at: new Date().toISOString(),
+      details_url: 'https://kirolinter.dev'
+    });
+  }
+
+  async updateCheckRun(checkRunId, result) {
+    const conclusion = result.passed ? 'success' : 'failure';
+    const title = result.passed ? '✅ Quality Gate Passed' : '❌ Quality Gate Failed';
+    
+    const summary = this.generateCheckRunSummary(result);
+
+    await this.octokit.rest.checks.update({
+      owner: this.context.repo.owner,
+      repo: this.context.repo.repo,
+      check_run_id: checkRunId,
+      status: 'completed',
+      conclusion: conclusion,
+      completed_at: new Date().toISOString(),
+      output: {
+        title: title,
+        summary: summary,
+        text: this.generateDetailedReport(result)
+      }
+    });
+  }
+
+  generateCheckRunSummary(result) {
+    return `
+**Quality Score**: ${result.qualityScore}/100
+**Risk Score**: ${result.riskScore}/100
+
+**Issues Found**: ${result.issuesFound}
+- Critical: ${result.criticalIssues}
+- High: ${result.highIssues}  
+- Medium: ${result.mediumIssues}
+- Low: ${result.lowIssues}
+
+**Gate Type**: ${this.config.gateType.replace('_', ' ')}
+**Result**: ${result.passed ? 'PASSED' : 'FAILED'}
+    `.trim();
+  }
+
+  generateDetailedReport(result) {
+    let report = `## 📊 Detailed Quality Report\n\n`;
+    
+    if (result.issues.length > 0) {
+      report += `### Issues Found\n\n`;
+      
+      const groupedIssues = result.issues.reduce((acc, issue) => {
+        if (!acc[issue.severity]) acc[issue.severity] = [];
+        acc[issue.severity].push(issue);
+        return acc;
+      }, {});
+
+      for (const [severity, issues] of Object.entries(groupedIssues)) {
+        if (issues.length === 0) continue;
+        
+        report += `#### ${severity.toUpperCase()} Issues (${issues.length})\n\n`;
+        
+        for (const issue of issues.slice(0, 10)) { // Limit to first 10 per severity
+          report += `- **${issue.rule || issue.category}**: ${issue.message}\n`;
+          report += `  - File: \`${issue.file}:${issue.line}\`\n\n`;
+        }
+        
+        if (issues.length > 10) {
+          report += `... and ${issues.length - 10} more ${severity} issues\n\n`;
+        }
+      }
+    }
+
+    if (result.recommendations && result.recommendations.length > 0) {
+      report += `### 🎯 Recommendations\n\n`;
+      result.recommendations.slice(0, 5).forEach((rec, index) => {
+        report += `${index + 1}. ${rec}\n`;
+      });
+    }
+
+    return report;
+  }
+
+  async createPrComment(result) {
+    const body = this.generatePrComment(result);
+    
+    await this.octokit.rest.issues.createComment({
+      owner: this.context.repo.owner,
+      repo: this.context.repo.repo,
+      issue_number: this.context.payload.pull_request.number,
+      body: body
+    });
+  }
+
+  generatePrComment(result) {
+    const statusEmoji = result.passed ? '✅' : '❌';
+    const scoreColor = result.qualityScore >= 80 ? '🟢' : result.qualityScore >= 60 ? '🟡' : '🔴';
+    
+    return `
+## ${statusEmoji} KiroLinter DevOps Quality Report
+
+**Quality Score**: ${scoreColor} ${result.qualityScore}/100  
+**Risk Score**: ${result.riskScore}/100  
+**Gate**: ${this.config.gateType.replace('_', ' ')}  
+
+### 📈 Issue Summary
+- **Critical**: ${result.criticalIssues}
+- **High**: ${result.highIssues}  
+- **Medium**: ${result.mediumIssues}
+- **Low**: ${result.lowIssues}
+
+${result.passed ? 
+  '🎉 **Quality gate passed!** Your code meets the required quality standards.' : 
+  '⚠️ **Quality gate failed.** Please address the issues above before merging.'
+}
+
+---
+*Generated by [KiroLinter DevOps](https://kirolinter.dev) • [View detailed report](${result.reportUrl || '#'})*
+    `.trim();
+  }
+
+  async generateSarifReport(result) {
+    const sarifReport = {
+      version: '2.1.0',
+      $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+      runs: [{
+        tool: {
+          driver: {
+            name: 'KiroLinter DevOps',
+            version: '1.0.0',
+            informationUri: 'https://kirolinter.dev',
+            rules: []
+          }
+        },
+        results: result.issues.map(issue => ({
+          ruleId: issue.rule || issue.category,
+          level: this.mapSeverityToSarifLevel(issue.severity),
+          message: {
+            text: issue.message
+          },
+          locations: [{
+            physicalLocation: {
+              artifactLocation: {
+                uri: issue.file
+              },
+              region: {
+                startLine: issue.line
+              }
+            }
+          }]
+        }))
+      }]
+    };
+
+    const sarifPath = path.join(process.cwd(), 'kirolinter-results.sarif');
+    await fs.writeJSON(sarifPath, sarifReport, { spaces: 2 });
+    
+    return sarifPath;
+  }
+
+  mapSeverityToSarifLevel(severity) {
+    switch (severity.toLowerCase()) {
+      case 'critical':
+        return 'error';
+      case 'high':
+        return 'error';
+      case 'medium':
+        return 'warning';
+      case 'low':
+        return 'note';
+      default:
+        return 'warning';
+    }
+  }
+
+  setOutputs(result) {
+    core.setOutput('quality-score', result.qualityScore.toString());
+    core.setOutput('issues-found', result.issuesFound.toString());
+    core.setOutput('critical-issues', result.criticalIssues.toString());
+    core.setOutput('high-issues', result.highIssues.toString());
+    core.setOutput('medium-issues', result.mediumIssues.toString());
+    core.setOutput('low-issues', result.lowIssues.toString());
+    core.setOutput('risk-score', result.riskScore.toString());
+    core.setOutput('passed', result.passed.toString());
+    
+    if (result.reportUrl) {
+      core.setOutput('report-url', result.reportUrl);
+    }
+  }
+}
+
+// Run the action
+async function run() {
+  const action = new KiroLinterDevOpsAction();
+  await action.run();
+}
+
+run().catch(error => {
+  core.setFailed(error.message);
+});
+module.exports = __webpack_exports__;
 /******/ })()
 ;
 //# sourceMappingURL=index.js.map

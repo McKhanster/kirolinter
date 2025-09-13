@@ -1,60 +1,19 @@
-import * as core from '@actions/core';
-import * as github from '@actions/github';
-import * as exec from '@actions/exec';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import axios from 'axios';
-import * as yaml from 'js-yaml';
-
-interface QualityGateConfig {
-  gateType: string;
-  riskAssessment: boolean;
-  deploymentAnalysis: boolean;
-  failOnIssues: boolean;
-  severityThreshold: string;
-  timeout: number;
-  outputFormat: string;
-  createPrComment: boolean;
-  createCheckRun: boolean;
-  configPath: string;
-  endpoint: string;
-  token?: string;
-}
-
-interface QualityResult {
-  qualityScore: number;
-  issuesFound: number;
-  criticalIssues: number;
-  highIssues: number;
-  mediumIssues: number;
-  lowIssues: number;
-  riskScore: number;
-  passed: boolean;
-  reportUrl?: string;
-  sarifFile?: string;
-  checkRunId?: number;
-  issues: Array<{
-    severity: string;
-    message: string;
-    file: string;
-    line: number;
-    rule: string;
-  }>;
-  recommendations: string[];
-}
+const core = require('@actions/core');
+const github = require('@actions/github');
+const exec = require('@actions/exec');
+const fs = require('fs-extra');
+const path = require('path');
+const axios = require('axios');
+const yaml = require('js-yaml');
 
 class KiroLinterDevOpsAction {
-  private config: QualityGateConfig;
-  private octokit: any;
-  private context: any;
-
   constructor() {
     this.config = this.parseInputs();
     this.octokit = github.getOctokit(core.getInput('github-token'));
     this.context = github.context;
   }
 
-  private parseInputs(): QualityGateConfig {
+  parseInputs() {
     return {
       gateType: core.getInput('gate-type') || 'pre-merge',
       riskAssessment: core.getBooleanInput('risk-assessment'),
@@ -71,12 +30,12 @@ class KiroLinterDevOpsAction {
     };
   }
 
-  async run(): Promise<void> {
+  async run() {
     try {
       core.info(`🚀 Starting KiroLinter DevOps Quality Gate - ${this.config.gateType}`);
       
       // Create check run if requested
-      let checkRun: any = null;
+      let checkRun = null;
       if (this.config.createCheckRun) {
         checkRun = await this.createCheckRun();
         core.info(`✅ Created check run: ${checkRun.data.html_url}`);
@@ -117,11 +76,11 @@ class KiroLinterDevOpsAction {
       }
 
     } catch (error) {
-      core.setFailed(`Action failed: ${error instanceof Error ? error.message : String(error)}`);
+      core.setFailed(`Action failed: ${error.message}`);
     }
   }
 
-  private async loadConfiguration(): Promise<any> {
+  async loadConfiguration() {
     try {
       if (await fs.pathExists(this.config.configPath)) {
         const configContent = await fs.readFile(this.config.configPath, 'utf8');
@@ -136,7 +95,7 @@ class KiroLinterDevOpsAction {
     }
   }
 
-  private async runQualityAnalysis(config: any): Promise<QualityResult> {
+  async runQualityAnalysis(config) {
     core.info('🔍 Running quality analysis...');
 
     try {
@@ -157,12 +116,12 @@ class KiroLinterDevOpsAction {
     }
   }
 
-  private async checkLocalKiroLinter(): Promise<boolean> {
+  async checkLocalKiroLinter() {
     try {
       let exitCode = 0;
       await exec.exec('kirolinter', ['--version'], {
         listeners: {
-          stdout: (data: Buffer) => {
+          stdout: (data) => {
             core.info(`KiroLinter version: ${data.toString()}`);
           }
         },
@@ -176,16 +135,16 @@ class KiroLinterDevOpsAction {
     }
   }
 
-  private async installAndRunKiroLinter(config: any): Promise<QualityResult> {
+  async installAndRunKiroLinter(config) {
     core.info('📦 Installing KiroLinter...');
     
-    // Install KiroLinter via pip
-    await exec.exec('pip', ['install', 'kirolinter-devops']);
+    // Install KiroLinter from current directory in editable mode
+    await exec.exec('pip', ['install', '-e', '.']);
     
     return await this.runLocalAnalysis(config);
   }
 
-  private async runLocalAnalysis(config: any): Promise<QualityResult> {
+  async runLocalAnalysis(config) {
     core.info('🔍 Running local KiroLinter analysis...');
 
     const args = [
@@ -211,10 +170,10 @@ class KiroLinterDevOpsAction {
     let output = '';
     await exec.exec('kirolinter', args, {
       listeners: {
-        stdout: (data: Buffer) => {
+        stdout: (data) => {
           output += data.toString();
         },
-        stderr: (data: Buffer) => {
+        stderr: (data) => {
           core.warning(data.toString());
         }
       },
@@ -229,7 +188,7 @@ class KiroLinterDevOpsAction {
     }
   }
 
-  private async runCloudAnalysis(config: any): Promise<QualityResult> {
+  async runCloudAnalysis(config) {
     core.info('☁️ Running cloud KiroLinter analysis...');
 
     const payload = {
@@ -257,7 +216,7 @@ class KiroLinterDevOpsAction {
     return this.normalizeResult(response.data);
   }
 
-  private normalizeResult(rawResult: any): QualityResult {
+  normalizeResult(rawResult) {
     return {
       qualityScore: rawResult.quality_score || rawResult.qualityScore || 0,
       issuesFound: rawResult.issues_found || rawResult.issuesFound || 0,
@@ -273,7 +232,7 @@ class KiroLinterDevOpsAction {
     };
   }
 
-  private async createCheckRun(): Promise<any> {
+  async createCheckRun() {
     return await this.octokit.rest.checks.create({
       owner: this.context.repo.owner,
       repo: this.context.repo.repo,
@@ -285,7 +244,7 @@ class KiroLinterDevOpsAction {
     });
   }
 
-  private async updateCheckRun(checkRunId: number, result: QualityResult): Promise<void> {
+  async updateCheckRun(checkRunId, result) {
     const conclusion = result.passed ? 'success' : 'failure';
     const title = result.passed ? '✅ Quality Gate Passed' : '❌ Quality Gate Failed';
     
@@ -306,7 +265,7 @@ class KiroLinterDevOpsAction {
     });
   }
 
-  private generateCheckRunSummary(result: QualityResult): string {
+  generateCheckRunSummary(result) {
     return `
 **Quality Score**: ${result.qualityScore}/100
 **Risk Score**: ${result.riskScore}/100
@@ -322,7 +281,7 @@ class KiroLinterDevOpsAction {
     `.trim();
   }
 
-  private generateDetailedReport(result: QualityResult): string {
+  generateDetailedReport(result) {
     let report = `## 📊 Detailed Quality Report\n\n`;
     
     if (result.issues.length > 0) {
@@ -332,7 +291,7 @@ class KiroLinterDevOpsAction {
         if (!acc[issue.severity]) acc[issue.severity] = [];
         acc[issue.severity].push(issue);
         return acc;
-      }, {} as Record<string, any[]>);
+      }, {});
 
       for (const [severity, issues] of Object.entries(groupedIssues)) {
         if (issues.length === 0) continue;
@@ -340,7 +299,7 @@ class KiroLinterDevOpsAction {
         report += `#### ${severity.toUpperCase()} Issues (${issues.length})\n\n`;
         
         for (const issue of issues.slice(0, 10)) { // Limit to first 10 per severity
-          report += `- **${issue.rule}**: ${issue.message}\n`;
+          report += `- **${issue.rule || issue.category}**: ${issue.message}\n`;
           report += `  - File: \`${issue.file}:${issue.line}\`\n\n`;
         }
         
@@ -350,7 +309,7 @@ class KiroLinterDevOpsAction {
       }
     }
 
-    if (result.recommendations.length > 0) {
+    if (result.recommendations && result.recommendations.length > 0) {
       report += `### 🎯 Recommendations\n\n`;
       result.recommendations.slice(0, 5).forEach((rec, index) => {
         report += `${index + 1}. ${rec}\n`;
@@ -360,7 +319,7 @@ class KiroLinterDevOpsAction {
     return report;
   }
 
-  private async createPrComment(result: QualityResult): Promise<void> {
+  async createPrComment(result) {
     const body = this.generatePrComment(result);
     
     await this.octokit.rest.issues.createComment({
@@ -371,7 +330,7 @@ class KiroLinterDevOpsAction {
     });
   }
 
-  private generatePrComment(result: QualityResult): string {
+  generatePrComment(result) {
     const statusEmoji = result.passed ? '✅' : '❌';
     const scoreColor = result.qualityScore >= 80 ? '🟢' : result.qualityScore >= 60 ? '🟡' : '🔴';
     
@@ -398,7 +357,7 @@ ${result.passed ?
     `.trim();
   }
 
-  private async generateSarifReport(result: QualityResult): Promise<string> {
+  async generateSarifReport(result) {
     const sarifReport = {
       version: '2.1.0',
       $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -412,7 +371,7 @@ ${result.passed ?
           }
         },
         results: result.issues.map(issue => ({
-          ruleId: issue.rule,
+          ruleId: issue.rule || issue.category,
           level: this.mapSeverityToSarifLevel(issue.severity),
           message: {
             text: issue.message
@@ -437,7 +396,7 @@ ${result.passed ?
     return sarifPath;
   }
 
-  private mapSeverityToSarifLevel(severity: string): string {
+  mapSeverityToSarifLevel(severity) {
     switch (severity.toLowerCase()) {
       case 'critical':
         return 'error';
@@ -452,7 +411,7 @@ ${result.passed ?
     }
   }
 
-  private setOutputs(result: QualityResult): void {
+  setOutputs(result) {
     core.setOutput('quality-score', result.qualityScore.toString());
     core.setOutput('issues-found', result.issuesFound.toString());
     core.setOutput('critical-issues', result.criticalIssues.toString());
@@ -469,7 +428,7 @@ ${result.passed ?
 }
 
 // Run the action
-async function run(): Promise<void> {
+async function run() {
   const action = new KiroLinterDevOpsAction();
   await action.run();
 }
